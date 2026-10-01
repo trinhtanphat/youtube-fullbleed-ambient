@@ -1,0 +1,93 @@
+#ytfb-root {
+  --ytfb-brightness: 0.52;
+  --ytfb-blur: 42px;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  background: #050505;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  contain: strict;
+}
+
+html.ytfb-active #ytfb-root { opacity: 1; }
+
+#ytfb-root .ytfb-fallback,
+#ytfb-root canvas {
+  position: absolute;
+  inset: -8%;
+  width: 116%;
+  height: 116%;
+  object-fit: cover;
+  transform: scale(1.04);
+  will-change: transform, opacity;
+}
+
+#ytfb-root canvas {
+  filter: brightness(var(--ytfb-brightness));
+}
+
+#ytfb-root .ytfb-fallback {
+  opacity: 0;
+  filter: blur(var(--ytfb-blur)) brightness(var(--ytfb-brightness)) saturate(1.3);
+}
+#ytfb-root.ytfb-static .ytfb-fallback { opacity: 1; }
+#ytfb-root.ytfb-static canvas { opacity: 0; }
+
+#ytfb-root .ytfb-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 20%, transparent 0 28%, rgba(0,0,0,.18) 62%, rgba(0,0,0,.55) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,.08), rgba(0,0,0,.36));
+}
+
+html.ytfb-active,
+html.ytfb-active body { background: #050505 !important; }
+
+html.ytfb-active body { isolation: isolate; }
+
+html.ytfb-active ytd-app {
+  position: relative !important;
+  z-index: 1 !important;
+  background: transparent !important;
+}
+
+html.ytfb-active ytd-watch-flexy,
+html.ytfb-active #content.ytd-app,
+html.ytfb-active #page-manager,
+html.ytfb-active #columns,
+html.ytfb-active #primary,
+html.ytfb-active #secondary {
+  background: transparent !important;
+}
+
+html.ytfb-focus body { overflow: hidden !important; }
+
+html.ytfb-focus #movie_player {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 2147483646 !important;
+  background: transparent !important;
+}
+
+html.ytfb-focus #movie_player video.html5-main-video {
+  width: 100% !important;
+  height: 100% !important;
+  left: 0 !important;
+  top: 0 !important;
+  object-fit: contain !important;
+}
+
+html.ytfb-focus #movie_player .ytp-chrome-bottom {
+  left: 12px !important;
+  width: calc(100% - 24px) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ytfb-root { transition: none; }
+}
