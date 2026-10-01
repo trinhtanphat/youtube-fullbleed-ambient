@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>YouTube Fullbleed Ambient</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Fullbleed Ambient</h1>
+        <p>Low-overhead immersive YouTube background</p>
+      </div>
+      <label class="switch" aria-label="Enable extension">
+        <input id="enabled" type="checkbox">
+        <span></span>
+      </label>
+    </header>
+
+    <section>
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="ambient">Ambient background</option>
+        <option value="focus">Ambient + Focus fill</option>
+      </select>
+
+      <label for="brightness">Background brightness <output id="brightnessValue"></output></label>
+      <input id="brightness" type="range" min="20" max="100" step="1">
+
+      <label for="blur">Blur <output id="blurValue"></output></label>
+      <input id="blur" type="range" min="12" max="80" step="1">
+
+      <div class="grid">
+        <div>
+          <label for="fps">Render FPS</label>
+          <select id="fps">
+            <option value="2">2 FPS</option>
+            <option value="4">4 FPS</option>
+            <option value="6">6 FPS</option>
+            <option value="10">10 FPS</option>
+          </select>
+        </div>
+        <div>
+          <label for="quality">Quality</label>
+          <select id="quality">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button id="toggleFocus" type="button">Toggle focus</button>
+      <button id="reset" type="button" class="secondary">Reset defaults</button>
+    </section>
+
+    <p id="status" role="status" aria-live="polite"></p>
+    <p class="hint">Esc exits Focus fill. Default: 4 FPS, medium canvas budget.</p>
+  </main>
+  <script src="helpers.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
