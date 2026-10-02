@@ -1,26 +1,67 @@
 # YouTube Fullbleed Ambient
 
-A lightweight Chrome/Edge Manifest V3 extension that extends the currently playing YouTube video into a blurred full-page moving background. It also includes an optional **Focus fill** mode that expands the existing YouTube player to the browser viewport without using the browser Fullscreen API.
+A lightweight Chrome/Edge Manifest V3 extension that turns the currently playing YouTube video into a full-page ambient scene **without starting a second video decoder**.
 
-## Why it stays light
+Version 1.1 adds a scroll-first experience so the effect stays useful after the novelty wears off: the real YouTube player can remain interactive in a dock while you read comments, and the ambient background automatically calms down instead of fighting the text.
 
-- Reuses the existing YouTube `<video>`; it **does not duplicate or re-decode the stream**.
-- Samples the current frame into one low-resolution canvas.
-- Default canvas budget is about **0.23 MP** and default refresh is **4 FPS**.
-- CSS performs the blur/scale on the compositor.
-- Rendering stops when the tab is hidden, video is paused/ended, the extension is disabled, or you leave a YouTube watch page.
-- One MutationObserver is reused for YouTube SPA navigation and video replacement.
+## Experience
+
+### Ambient page
+
+The current video is sampled into one low-resolution canvas and stretched behind the YouTube page. YouTube controls, recommendations, comments, navigation, and video switching stay native.
+
+### Scroll Dock
+
+With **Keep video docked** enabled, the existing YouTube player moves into a floating corner dock after you scroll past it. You can:
+
+- keep watching while reading comments;
+- pause/seek/change volume using the normal YouTube controls;
+- switch to another video normally;
+- choose Small / Medium / Large dock sizes;
+- use `Alt+Shift+D` to dock or undock immediately.
+
+No duplicate `<video>` element is created.
+
+### Calm reading mode
+
+Once you scroll into the reading area, ambient intensity automatically softens. This reduces the “busy wallpaper” feeling that makes many ambient extensions fun for a few minutes but tiring long-term.
+
+### Glass comments
+
+Comments sit on one translucent panel instead of many blurred cards. The background is still visible, but text remains readable and the GPU does not need to blur every comment row.
+
+### Focus fill
+
+Focus fill expands the real YouTube player to the browser viewport. Press **Esc** to return to normal browsing.
+
+## Performance design
+
+- Reuses the existing YouTube `<video>`; no duplicate network stream or decoder.
+- Default effective canvas is approximately **484×272** at Softness 42 (Medium quality).
+- Softness is implemented by dynamic downsampling instead of a costly live Gaussian blur.
+- Default refresh is **4 FPS**.
+- Available FPS presets: 2 / 4 / 6 / 10.
+- Rendering stops when the tab is hidden, video is paused/ended, the extension is disabled, or the page leaves a valid YouTube watch URL.
+- One MutationObserver is reused for YouTube SPA navigation.
+- Scroll behavior is handled with a passive listener plus one queued animation-frame update.
+- Settings writes from range sliders are debounced.
+
+For a 4K source, the default Medium / 4 FPS / Softness 42 preset draws about **0.527 megapixels per second** into the ambient canvas.
+
+See [PERFORMANCE.md](PERFORMANCE.md) for the measured Windows 181 CPU/RAM/GPU observations and limitations.
 
 ## Install unpacked
 
 ### Chrome
+
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select this repository directory.
-5. Open a YouTube watch page.
+5. Open or refresh a YouTube watch page.
 
 ### Edge
+
 1. Open `edge://extensions`.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
@@ -28,30 +69,26 @@ A lightweight Chrome/Edge Manifest V3 extension that extends the currently playi
 
 ## Controls
 
-Open the extension popup to change:
-- Enable/disable.
-- Ambient background or Ambient + Focus fill.
-- Brightness and blur.
-- 2 / 4 / 6 / 10 background render FPS.
-- Low / Medium / High canvas budget.
-- Toggle Focus fill manually.
+The popup contains:
+
+- master enable toggle;
+- Ambient or Focus-fill startup mode;
+- Scroll Dock on/off;
+- dock size;
+- Calm reading mode;
+- Glass comments;
+- brightness and softness;
+- 2 / 4 / 6 / 10 FPS;
+- Low / Medium / High canvas budget;
+- Dock / undock button;
+- Focus fill button;
 - Reset defaults.
 
-Press **Esc** to leave Focus fill.
+Keyboard shortcuts implemented inside YouTube pages:
 
-## Performance presets
-
-The background draw workload is intentionally bounded. Run:
-
-```powershell
-npm run perf
-```
-
-For a 4K source, Medium at 6 FPS draws only about **1.38 megapixels per second** into the background canvas. The foreground YouTube video decode remains YouTube's normal workload.
-
-For lowest laptop/VM overhead use **Low + 2 or 4 FPS**. High + 10 FPS is intentionally available for smoother animation but costs more compositor/draw work.
-
-See [PERFORMANCE.md](PERFORMANCE.md) for the measured Windows 181 CPU/RAM/GPU observations and benchmark limitations.
+- `Alt+Shift+D` — dock / undock.
+- `Alt+Shift+A` — enable / disable ambient.
+- `Esc` — leave Focus fill.
 
 ## Tests
 
@@ -61,22 +98,36 @@ npm run check
 npm run perf
 ```
 
+For a local browser already exposing a CDP debugging port:
+
+```powershell
+node scripts/cdp-inject.js 9244
+node scripts/cdp-ux-smoke.js 9244
+```
+
+The UX smoke verifies: ambient activation, the default 484×272 effective canvas, scroll-triggered docking, reading mode, fixed player positioning, and clean undocking when returning to the top.
+
 No GitHub Actions are required.
 
 ## Privacy
 
 No analytics, tracking, remote scripts, accounts, or external services are used by the extension. Settings are stored with Chrome/Edge sync storage. The extension is scoped to `https://www.youtube.com/*`.
 
-## How it works
-
-The content script finds YouTube's existing main video element, periodically calls `canvas.drawImage(video,...)` at a bounded internal resolution, and lets CSS stretch/blur that canvas across the viewport. If frame drawing is unavailable, it falls back to the video's YouTube thumbnail as a static blurred background.
-
 ## Known limitations
 
 - YouTube frequently changes DOM/CSS; selectors may occasionally need adjustment.
-- Browser/DRM policies can prevent canvas frame capture for some protected media. Static thumbnail fallback is used when drawing fails.
-- Focus fill is an in-page layout override, not the browser Fullscreen API; unusual YouTube experiments may affect control positioning.
-- GPU memory numbers vary by browser, driver and VM, so repository benchmarks focus on bounded draw pixel rate plus real process monitoring.
+- Browser/DRM policies can prevent canvas frame capture for some protected media. Static YouTube thumbnail fallback is used when drawing fails.
+- YouTube experiments or its native miniplayer may occasionally interact with Scroll Dock layout.
+- Focus fill is an in-page viewport override, not the browser Fullscreen API.
+- GPU/CPU results vary substantially by browser, driver, VM, display scaling, and source-video codec.
+
+## Files worth reading
+
+- `content.js` — lifecycle, rendering, SPA handling, scroll dock.
+- `content.css` — ambient, reading, comments, focus and dock presentation.
+- `helpers.js` — pure settings, throttling and geometry helpers.
+- `PERFORMANCE.md` — benchmark notes.
+- `SECURITY.md` — security posture.
 
 ## License
 
