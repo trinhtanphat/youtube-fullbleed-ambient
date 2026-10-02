@@ -48,6 +48,10 @@ const path = require("node:path");
     return result.result?.value;
   }
 
+  async function wait(ms) {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   const root = path.resolve(__dirname, "..");
   const css = fs.readFileSync(path.join(root, "content.css"), "utf8");
   const helpers = fs.readFileSync(path.join(root, "helpers.js"), "utf8");
@@ -55,10 +59,13 @@ const path = require("node:path");
 
   await evaluate(`(() => {
     document.getElementById("ytfb-root")?.remove();
+    document.getElementById("ytfb-brand-fallback")?.remove();
+    document.querySelectorAll(".ytfb-logo-anchor").forEach((el) => el.classList.remove("ytfb-logo-anchor"));
     document.documentElement.classList.remove(
       "ytfb-active","ytfb-reading","ytfb-docked","ytfb-focus",
       "ytfb-comment-glass","ytfb-dock-small","ytfb-dock-medium","ytfb-dock-large"
     );
+
     let style = document.getElementById("ytfb-dev-style");
     if (!style) {
       style = document.createElement("style");
@@ -66,48 +73,143 @@ const path = require("node:path");
       document.documentElement.appendChild(style);
     }
     style.textContent = ${JSON.stringify(css)};
+
+    globalThis.__ytfbStorageListener = null;
+    globalThis.__ytfbRuntimeListener = null;
     globalThis.chrome = {
       storage: {
         sync: {
           get(defaults, cb) { cb(defaults); },
           set(_value, cb) { if (cb) cb(); }
         },
-        onChanged: { addListener() {} }
+        onChanged: {
+          addListener(fn) { globalThis.__ytfbStorageListener = fn; }
+        }
       },
       runtime: {
         lastError: null,
-        onMessage: { addListener() {} }
+        onMessage: {
+          addListener(fn) { globalThis.__ytfbRuntimeListener = fn; }
+        }
       }
     };
   })()`);
 
   await evaluate(helpers);
   await evaluate(content);
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+  await wait(1200);
 
-  const initial = JSON.parse(await evaluate(`JSON.stringify({
-    active: document.documentElement.classList.contains("ytfb-active"),
-    docked: document.documentElement.classList.contains("ytfb-docked"),
-    reading: document.documentElement.classList.contains("ytfb-reading"),
-    glass: document.documentElement.classList.contains("ytfb-comment-glass"),
-    canvas: (() => {
-      const c = document.querySelector("#ytfb-root canvas");
-      return c ? [c.width,c.height] : null;
-    })()
+  const initial = JSON.parse(await evaluate(`JSON.stringify((() => {
+    const masthead = document.querySelector("#masthead-container");
+    const nativeLogo = document.querySelector("ytd-masthead#masthead ytd-topbar-logo-renderer");
+    const logoLink = nativeLogo?.querySelector("a#logo");
+    const logoRect = nativeLogo?.getBoundingClientRect();
+    const logoLinkStyle = logoLink ? getComputedStyle(logoLink) : null;
+    const mastheadStyle = masthead ? getComputedStyle(masthead) : null;
+    const canvas = document.querySelector("#ytfb-root canvas");
+    return {
+      active: document.documentElement.classList.contains("ytfb-active"),
+      docked: document.documentElement.classList.contains("ytfb-docked"),
+      reading: document.documentElement.classList.contains("ytfb-reading"),
+      glass: document.documentElement.classList.contains("ytfb-comment-glass"),
+      canvas: canvas ? [canvas.width, canvas.height] : null,
+      nativeLogoVisible: Boolean(nativeLogo && logoRect.width >= 40 && logoRect.height >= 20),
+      logoAccent: Boolean(nativeLogo?.classList.contains("ytfb-logo-anchor")),
+      logoHref: logoLink?.getAttribute("href") || null,
+      logoTitle: logoLink?.getAttribute("title") || null,
+      logoPointerEvents: logoLinkStyle?.pointerEvents || null,
+      fallbackCount: document.querySelectorAll("#ytfb-brand-fallback").length,
+      mastheadBorder: mastheadStyle?.borderBottomWidth || null,
+      mastheadBackground: mastheadStyle?.backgroundColor || null
+    };
+  })())`));
+
+  await evaluate(`(() => {
+    const nativeLogo = document.querySelector("ytd-masthead#masthead ytd-topbar-logo-renderer");
+    if (!nativeLogo?.parentNode) return false;
+    globalThis.__ytfbRemovedNativeLogo = {
+      node: nativeLogo,
+      parent: nativeLogo.parentNode,
+      next: nativeLogo.nextSibling
+    };
+    nativeLogo.remove();
+    return true;
+  })()`);
+  await wait(500);
+
+  const fallbackWhenNativeHidden = JSON.parse(await evaluate(`JSON.stringify((() => {
+    const fallback = document.getElementById("ytfb-brand-fallback");
+    const rect = fallback?.getBoundingClientRect();
+    return {
+      exists: Boolean(fallback),
+      visible: Boolean(fallback && rect.width > 60 && rect.height >= 20),
+      label: fallback?.getAttribute("aria-label") || null
+    };
+  })())`));
+
+  await evaluate(`(() => {
+    const saved = globalThis.__ytfbRemovedNativeLogo;
+    if (saved?.node && saved.parent?.isConnected) {
+      const before = saved.next?.parentNode === saved.parent ? saved.next : null;
+      saved.parent.insertBefore(saved.node, before);
+    }
+    globalThis.__ytfbRemovedNativeLogo = null;
+  })()`);
+  await wait(500);
+
+  const nativeRestored = JSON.parse(await evaluate(`JSON.stringify({
+    fallbackGone: !document.getElementById("ytfb-brand-fallback"),
+    logoAccent: Boolean(document.querySelector("ytd-masthead#masthead ytd-topbar-logo-renderer")?.classList.contains("ytfb-logo-anchor"))
   })`));
 
+  const focusLifecycle = JSON.parse(await evaluate(`JSON.stringify((() => {
+    const storage = globalThis.__ytfbStorageListener;
+    const runtime = globalThis.__ytfbRuntimeListener;
+    if (!storage || !runtime) return { hooks: false };
+
+    const focusSettings = {
+      enabled: true, mode: "focus", brightness: 50, blur: 42,
+      fps: 4, quality: "medium", scrollMode: "dock", dockSize: "medium",
+      readingCalm: true, commentGlass: true
+    };
+    storage({ ytfbSettings: { newValue: focusSettings } }, "sync");
+    const focusAfterModeSetting = document.documentElement.classList.contains("ytfb-focus");
+
+    let toggleResponse = null;
+    runtime({ type: "ytfb-toggle-focus" }, null, (response) => { toggleResponse = response; });
+    const focusAfterManualToggle = document.documentElement.classList.contains("ytfb-focus");
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    const focusAfterEscape = document.documentElement.classList.contains("ytfb-focus");
+
+    storage({
+      ytfbSettings: { newValue: { ...focusSettings, brightness: 61 } }
+    }, "sync");
+    const focusAfterBrightnessChange = document.documentElement.classList.contains("ytfb-focus");
+
+    return {
+      hooks: true,
+      focusAfterModeSetting,
+      focusAfterManualToggle,
+      toggleOk: Boolean(toggleResponse?.ok),
+      focusAfterEscape,
+      focusAfterBrightnessChange
+    };
+  })())`));
+
   await evaluate(`window.scrollTo({ top: Math.max(1200, document.documentElement.scrollHeight * 0.25), behavior: "instant" })`);
-  await new Promise((resolve) => setTimeout(resolve, 700));
+  await wait(700);
 
   const scrolled = JSON.parse(await evaluate(`JSON.stringify({
     y: window.scrollY,
     docked: document.documentElement.classList.contains("ytfb-docked"),
     reading: document.documentElement.classList.contains("ytfb-reading"),
-    playerPosition: getComputedStyle(document.querySelector("#movie_player")).position
+    playerPosition: getComputedStyle(document.querySelector("#movie_player")).position,
+    logoAccent: Boolean(document.querySelector("ytd-masthead#masthead ytd-topbar-logo-renderer")?.classList.contains("ytfb-logo-anchor"))
   })`));
 
   await evaluate(`window.scrollTo({ top: 0, behavior: "instant" })`);
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await wait(500);
 
   const restored = JSON.parse(await evaluate(`JSON.stringify({
     y: window.scrollY,
@@ -115,12 +217,47 @@ const path = require("node:path");
     reading: document.documentElement.classList.contains("ytfb-reading")
   })`));
 
-  const result = { initial, scrolled, restored };
+  const lifecycle = JSON.parse(await evaluate(`JSON.stringify((() => {
+    const watchUrl = location.href;
+    history.pushState({}, "", "/");
+    document.dispatchEvent(new Event("yt-navigate-finish", { bubbles: true }));
+    const inactive = !document.documentElement.classList.contains("ytfb-active");
+    const brandCleared = !document.getElementById("ytfb-brand-fallback") &&
+      !document.querySelector(".ytfb-logo-anchor");
+
+    history.pushState({}, "", watchUrl);
+    document.dispatchEvent(new Event("yt-navigate-finish", { bubbles: true }));
+    return {
+      inactive,
+      brandCleared,
+      activeAgain: document.documentElement.classList.contains("ytfb-active")
+    };
+  })())`));
+  await wait(350);
+
+  const result = {
+    initial,
+    fallbackWhenNativeHidden,
+    nativeRestored,
+    focusLifecycle,
+    scrolled,
+    restored,
+    lifecycle
+  };
   console.log(JSON.stringify(result, null, 2));
 
   if (!initial.active || initial.docked || !initial.glass) process.exitCode = 2;
-  if (!(scrolled.y > 180) || !scrolled.docked || !scrolled.reading || scrolled.playerPosition !== "fixed") process.exitCode = 3;
-  if (restored.docked || restored.reading) process.exitCode = 4;
+  if (!initial.nativeLogoVisible || !initial.logoAccent || initial.logoHref !== "/" ||
+      initial.logoTitle !== "YouTube Home" || initial.logoPointerEvents === "none" || initial.fallbackCount !== 0) process.exitCode = 3;
+  if (initial.mastheadBorder !== "1px") process.exitCode = 4;
+  if (!fallbackWhenNativeHidden.exists || !fallbackWhenNativeHidden.visible || fallbackWhenNativeHidden.label !== "YouTube Home") process.exitCode = 5;
+  if (!nativeRestored.fallbackGone || !nativeRestored.logoAccent) process.exitCode = 6;
+  if (!focusLifecycle.hooks || focusLifecycle.focusAfterModeSetting || !focusLifecycle.focusAfterManualToggle ||
+      !focusLifecycle.toggleOk || focusLifecycle.focusAfterEscape || focusLifecycle.focusAfterBrightnessChange) process.exitCode = 7;
+  if (!(scrolled.y > 180) || !scrolled.docked || !scrolled.reading ||
+      scrolled.playerPosition !== "fixed" || !scrolled.logoAccent) process.exitCode = 8;
+  if (restored.docked || restored.reading) process.exitCode = 9;
+  if (!lifecycle.inactive || !lifecycle.brandCleared || !lifecycle.activeAgain) process.exitCode = 10;
 
   ws.close();
 })().catch((error) => {

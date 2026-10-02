@@ -235,3 +235,8 @@ input[type="range"] { accent-color: #ff0033; }
 .hint {
   margin-top: 2px;
 }
+
+.switch input:focus-visible + span {
+  outline: 2px solid #ff365f;
+  outline-offset: 3px;
+}

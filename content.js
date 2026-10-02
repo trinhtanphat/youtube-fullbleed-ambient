@@ -11,7 +11,9 @@
     ctx: null,
     fallback: null,
     video: null,
+    brandLogo: null,
     observer: null,
+    observing: false,
     timerId: null,
     scrollRaf: null,
     lastDraw: 0,
@@ -156,6 +158,72 @@
     if (video && video !== state.video) attachVideo(video);
   }
 
+
+  function clearTopbarBrand() {
+    document.getElementById("ytfb-brand-fallback")?.remove();
+    state.brandLogo?.classList.remove("ytfb-logo-anchor");
+    document.querySelectorAll("ytd-topbar-logo-renderer.ytfb-logo-anchor")
+      .forEach((logo) => logo.classList.remove("ytfb-logo-anchor"));
+    state.brandLogo = null;
+  }
+
+  function syncTopbarBrand() {
+    if (!state.active) {
+      clearTopbarBrand();
+      return;
+    }
+
+    const masthead = document.querySelector("ytd-masthead#masthead");
+    if (!masthead) return;
+
+    const nativeLogo = masthead.querySelector("ytd-topbar-logo-renderer");
+    const fallback = document.getElementById("ytfb-brand-fallback");
+
+    if (nativeLogo?.isConnected) {
+      nativeLogo.classList.add("ytfb-logo-anchor");
+      state.brandLogo = nativeLogo;
+      fallback?.remove();
+      return;
+    }
+
+    state.brandLogo = null;
+    const start = masthead.querySelector("#start");
+    if (!start || fallback) return;
+
+    const link = document.createElement("a");
+    link.id = "ytfb-brand-fallback";
+    link.className = "yt-simple-endpoint";
+    link.href = "/";
+    link.title = "YouTube Home";
+    link.setAttribute("aria-label", "YouTube Home");
+
+    const play = document.createElement("span");
+    play.className = "ytfb-brand-play";
+    play.setAttribute("aria-hidden", "true");
+
+    const label = document.createElement("span");
+    label.className = "ytfb-brand-word";
+    label.textContent = "YouTube";
+
+    link.append(play, label);
+    start.append(link);
+  }
+
+  function startObserver() {
+    if (!state.observer || state.observing) return;
+    state.observer.observe(document.documentElement, { childList: true, subtree: true });
+    state.observing = true;
+  }
+
+  function stopObserver() {
+    if (state.mutationTimer !== null) {
+      clearTimeout(state.mutationTimer);
+      state.mutationTimer = null;
+    }
+    if (state.observer && state.observing) state.observer.disconnect();
+    state.observing = false;
+  }
+
   function setDocked(next) {
     const value = Boolean(next) && state.active && !state.focus && state.settings.scrollMode !== "off";
     if (state.docked === value) return;
@@ -220,23 +288,32 @@
     else exitFocus();
   }
 
-  function activate() {
+  function activate(applyStartupMode = false) {
     state.active = true;
     ensureRoot();
     setVisualSettings();
     setFallback();
     document.documentElement.classList.add("ytfb-active");
+    startObserver();
     findAndAttachVideo();
-    applyFocusPreference();
+    syncTopbarBrand();
+
+    if (applyStartupMode) applyFocusPreference();
+    else if (state.settings.mode !== "focus" && state.focus) exitFocus();
+
+    setDocked(state.docked);
     queueScrollPresentation();
     if (state.video && !state.video.paused) scheduleRender();
   }
 
   function deactivate() {
     state.active = false;
+    stopObserver();
     cancelRenderLoop();
+    detachVideo();
     exitFocus();
     setDocked(false);
+    clearTopbarBrand();
     document.documentElement.classList.remove(
       "ytfb-active",
       "ytfb-reading",
@@ -248,19 +325,49 @@
     if (state.root) state.root.classList.remove("ytfb-static");
   }
 
-  function syncPage() {
+  function syncPage(applyStartupMode = false) {
+    const urlChanged = location.href !== state.lastUrl;
+    const eligible = state.settings.enabled && H.isEligibleYouTubeUrl(location.href);
     state.lastUrl = location.href;
-    setDocked(false);
-    if (state.settings.enabled && H.isEligibleYouTubeUrl(location.href)) activate();
-    else deactivate();
+
+    if (!eligible) {
+      deactivate();
+      return;
+    }
+
+    if (!state.active || urlChanged) {
+      setDocked(false);
+      activate(applyStartupMode);
+      return;
+    }
+
+    setVisualSettings();
+    syncTopbarBrand();
+    if (state.settings.mode !== "focus" && state.focus) exitFocus();
+    setDocked(state.docked);
+    findAndAttachVideo();
+    queueScrollPresentation();
+    if (state.video && !state.video.paused) scheduleRender();
+  }
+
+  function onNavigation() {
+    syncPage(true);
   }
 
   function onMutations() {
-    if (state.mutationTimer !== null) return;
+    if (!state.active || state.mutationTimer !== null) return;
     state.mutationTimer = setTimeout(() => {
       state.mutationTimer = null;
-      if (location.href !== state.lastUrl) syncPage();
-      if (state.active && (!state.video || !state.video.isConnected)) findAndAttachVideo();
+      if (!state.active) return;
+      if (location.href !== state.lastUrl) {
+        syncPage(true);
+        return;
+      }
+      if (!state.video || !state.video.isConnected) findAndAttachVideo();
+      const logoNeedsSync = !state.brandLogo?.isConnected ||
+        !state.brandLogo.closest("ytd-masthead#masthead") ||
+        document.getElementById("ytfb-brand-fallback");
+      if (logoNeedsSync) syncTopbarBrand();
     }, 250);
   }
 
@@ -280,6 +387,11 @@
       return;
     }
 
+    const target = event.target;
+    const editable = target instanceof HTMLElement &&
+      (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+    if (editable) return;
+
     if (event.altKey && event.shiftKey && event.code === "KeyA") {
       state.settings = H.normalizeSettings({ ...state.settings, enabled: !state.settings.enabled });
       chrome.storage.sync.set({ ytfbSettings: state.settings });
@@ -296,21 +408,19 @@
     if (state.bound) return;
     state.bound = true;
 
-    document.addEventListener("yt-navigate-finish", syncPage, true);
-    window.addEventListener("popstate", syncPage, { passive: true });
+    document.addEventListener("yt-navigate-finish", onNavigation, true);
+    window.addEventListener("popstate", onNavigation, { passive: true });
     window.addEventListener("scroll", queueScrollPresentation, { passive: true });
     window.addEventListener("resize", queueScrollPresentation, { passive: true });
     document.addEventListener("visibilitychange", onVisibility, { passive: true });
     document.addEventListener("keydown", onKeydown, true);
 
     state.observer = new MutationObserver(onMutations);
-    state.observer.observe(document.documentElement, { childList: true, subtree: true });
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "sync" || !changes.ytfbSettings) return;
       state.settings = H.normalizeSettings(changes.ytfbSettings.newValue);
-      setVisualSettings();
-      syncPage();
+      syncPage(false);
     });
 
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -354,6 +464,6 @@
   chrome.storage.sync.get({ ytfbSettings: H.DEFAULT_SETTINGS }, (result) => {
     state.settings = H.normalizeSettings(result.ytfbSettings);
     setVisualSettings();
-    syncPage();
+    syncPage(true);
   });
 })();

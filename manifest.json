@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Fullbleed Ambient",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Ambient YouTube background with scroll dock, calm comment reading, and optional focus-fill mode.",
   "permissions": ["storage"],
   "host_permissions": ["https://www.youtube.com/*"],
