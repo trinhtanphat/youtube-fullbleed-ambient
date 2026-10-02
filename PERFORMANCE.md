@@ -4,63 +4,81 @@ Performance is a design constraint, not an afterthought. The extension never cre
 
 ## Pixel budget
 
-For a 4K source, the internal canvas is capped to:
+The **Softness** control is intentionally cheap: it lowers the dynamic canvas resolution before the browser scales the image up. It does **not** run a Gaussian blur on every video frame. The static thumbnail fallback can still use CSS blur because it is not redrawn continuously.
 
-| Preset | Canvas | 2 FPS | 4 FPS | 6 FPS | 10 FPS |
+At the default Softness value (42), a 4K source is reduced to:
+
+| Preset | Effective canvas | 2 FPS | 4 FPS | 6 FPS | 10 FPS |
 |---|---:|---:|---:|---:|---:|
-| Low | 452x254 | 0.230 MP/s | 0.459 MP/s | 0.689 MP/s | 1.148 MP/s |
-| Medium | 640x360 | 0.461 MP/s | 0.922 MP/s | 1.382 MP/s | 2.304 MP/s |
-| High | 960x540 | 1.037 MP/s | 2.074 MP/s | 3.110 MP/s | 5.184 MP/s |
+| Low | 342x192 | 0.131 MP/s | 0.263 MP/s | 0.394 MP/s | 0.657 MP/s |
+| Medium | 484x272 | 0.263 MP/s | 0.527 MP/s | 0.790 MP/s | 1.316 MP/s |
+| High | 728x408 | 0.594 MP/s | 1.188 MP/s | 1.782 MP/s | 2.970 MP/s |
 
-The default is **Medium / 4 FPS**. Blur is applied on the small internal canvas; the full-page layer only applies brightness plus scaling.
+The default is **Medium / 4 FPS / Softness 42**, or about **0.527 megapixels per second** of canvas copies.
 
 ## 181 runtime measurement
 
-Measured on the user's Windows 181 VM:
+Measured on the Windows 181 development VM:
 
-- Windows build reported by Commander: 10.0.26200
+- Windows build 10.0.26200
 - 32 logical CPUs
 - Chrome 153.0.8010.53
 - VMware SVGA 3D + Microsoft Remote Display Adapter
-- Isolated Chrome profile playing a YouTube watch page
-- Same browser/profile used for baseline and ambient runtime samples
+- one isolated Chrome profile playing the same YouTube watch page
+- default Medium / 4 FPS / Softness 42 settings
 
-Stable branded Chrome 153 did not honor command-line unpacked-extension loading in this environment, so the runtime benchmark injected the **same packaged `helpers.js`, `content.js`, and `content.css`** through Chrome DevTools Protocol with a minimal `chrome.storage/runtime` shim. This validates the content-runtime path and rendering cost, but it is not a substitute for the final manual "Load unpacked" packaging check.
+Stable branded Chrome in this environment did not activate the unpacked extension from the command-line flags used by the automated harness. For runtime checks, the harness therefore injected the exact packaged `helpers.js`, `content.js`, and `content.css` through Chrome DevTools Protocol with a tiny storage/runtime shim. This exercises the same content-runtime and rendering path, but the final packaging step should still be checked with **Load unpacked** in Chrome/Edge.
 
-### 10-second CPU/RAM samples
+### CPU/RAM A/B samples
 
-| Phase | CPU, one-core equivalent | CPU, whole 32-thread VM | Working set | Private bytes |
+Short samples varied with YouTube loading, ads, caching, and renderer lifecycle. Two same-profile passes produced:
+
+| Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
 |---|---:|---:|---:|---:|
-| YouTube baseline | 87.66% | 2.739% | 1275.9 MB | 691.8 MB |
-| Ambient, Medium / 4 FPS | 162.97% | 5.093% | 1110.0 MB | 585.1 MB |
+| Baseline, earlier warm-up | 1.060% | 33.91% | 866.1 MB | 494.3 MB |
+| Ambient | 2.314% | 74.06% | 1031.0 MB | 509.7 MB |
+| Baseline, post-reload/warm | 0.195% | 6.25% | 1156.7 MB | 570.3 MB |
+| Ambient, warmed 15 s | 1.992% | 63.75% | 1248.5 MB | 522.7 MB |
 
-CPU therefore increased by about **75 percentage points of one logical core**, or about **2.35 percentage points of total CPU capacity on this 32-thread VM**, in this particular window. Browser/video workload is noisy, so these numbers should be treated as an indicative local measurement, not a universal benchmark.
+In these short local runs, the ambient effect kept the isolated Chrome process group around **2.0–2.3% of total CPU capacity** on this 32-thread VM. The apparent incremental cost varied by page state, roughly **+0.9 to +1.8 percentage points of whole-VM CPU**.
 
-The RAM values are for the entire isolated Chrome profile, not the extension alone. The ambient sample being lower than baseline is normal process/cache noise and must **not** be interpreted as the extension saving memory.
+That is not a universal number. A physical Intel/AMD/NVIDIA GPU, another codec, display scaling, source resolution, or browser version can move it substantially.
 
-### 30-second memory stability sample with ambient active
+The RAM figures are for the **entire Chrome profile**, not the extension alone. Renderer processes and shared browser caches can appear/disappear between samples, so the table must not be read as a precise extension-memory delta.
 
-Working set (MB):
+### 30-second memory stability check
 
-`1125.9 → 1132.5 → 1130.1 → 1122.9 → 1120.1 → 1127.0 → 1105.1`
+With the final optimized ambient path running, the profile was sampled every 10 seconds:
 
-Private bytes (MB):
+| Time | Chrome processes | Working set | Private bytes |
+|---:|---:|---:|---:|
+| 0 s | 11 | 1342.1 MB | 534.7 MB |
+| 10 s | 10 | 1322.0 MB | 520.0 MB |
+| 20 s | 10 | 1324.4 MB | 517.0 MB |
+| 30 s | 10 | 1322.5 MB | 518.9 MB |
 
-`586.8 → 596.6 → 591.4 → 586.5 → 582.5 → 593.7 → 582.8`
+After one Chrome process exited, both working set and private bytes stayed essentially flat. There was **no monotonic short-run RAM growth**, which is consistent with reusing one canvas/context and one throttled timer instead of allocating a new frame object or decoder continuously.
 
-There was **no monotonic RAM growth** in this 30-second run, which is consistent with the extension reusing one canvas/context rather than allocating a new frame object each update. This is evidence against an obvious short-run leak, not proof that a leak can never occur over hours/days.
+This is evidence against an obvious leak, not proof that no leak can ever appear over hours or days.
 
-### GPU observation
+## GPU observation
 
-The Chrome GPU process for the isolated profile reported about **2.55 MB Total Committed** through Windows' `GPU Process Memory` counter at one sample. Dedicated/shared usage counters reported zero on this VMware virtual graphics stack, so a precise extension-only VRAM delta could not be derived.
+`nvidia-smi` is unavailable on this VM. Windows reports VMware SVGA 3D plus the Microsoft Remote Display Adapter, and the per-process dedicated/shared GPU counters returned zero in this virtual graphics stack. A trustworthy extension-only VRAM delta therefore cannot be reported from 181.
 
-Because the machine uses VMware SVGA 3D, this number should not be generalized to a physical NVIDIA/AMD/Intel GPU. The implementation still bounds GPU pressure structurally: one composited background canvas, no duplicated video decoder, and no full-resolution video-copy canvas.
+The implementation limits GPU pressure structurally:
 
-## Practical recommendation
+- one ambient canvas;
+- no second video decoder;
+- no full-resolution video-copy surface;
+- no live Gaussian blur on every frame;
+- default effective canvas only 484x272 at 4 FPS;
+- rendering stops when hidden, paused, ended, disabled, or off a valid watch page.
 
-- **Default (Medium / 4 FPS):** good balance on the 181 VM.
-- **Low / 2–4 FPS:** recommended for laptops, battery use, VMs, or when YouTube itself is already CPU-heavy.
-- **High / 10 FPS:** smoother but intentionally more expensive.
-- Rendering stops when the tab is hidden, the video is paused/ended, the extension is disabled, or the page leaves an eligible YouTube watch URL.
+## Practical presets
 
-Always benchmark on the actual target device if power use or fan noise matters.
+- **Medium / 4 FPS**: default balance used for the runtime checks.
+- **Low / 2–4 FPS**: best for laptops, battery use, VMs, remote desktops, or already-heavy YouTube pages.
+- **6 FPS**: smoother ambient motion with moderate extra work.
+- **High / 10 FPS**: intentionally expensive; use only when the machine has headroom.
+
+Run `npm run perf` to print the current pixel-copy model after changing defaults.

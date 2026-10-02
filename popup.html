@@ -10,8 +10,9 @@
   <main>
     <header>
       <div>
+        <div class="eyebrow">YOUTUBE IMMERSIVE</div>
         <h1>Fullbleed Ambient</h1>
-        <p>Low-overhead immersive YouTube background</p>
+        <p>Ambient that stays useful while you scroll.</p>
       </div>
       <label class="switch" aria-label="Enable extension">
         <input id="enabled" type="checkbox">
@@ -19,31 +20,70 @@
       </label>
     </header>
 
-    <section>
-      <label for="mode">Mode</label>
+    <section class="panel">
+      <div class="section-title">Experience</div>
+
+      <label for="mode">Top-player mode</label>
       <select id="mode">
-        <option value="ambient">Ambient background</option>
-        <option value="focus">Ambient + Focus fill</option>
+        <option value="ambient">Ambient page</option>
+        <option value="focus">Focus fill on open</option>
       </select>
 
-      <label for="brightness">Background brightness <output id="brightnessValue"></output></label>
+      <div class="grid">
+        <div>
+          <label for="scrollMode">When scrolling</label>
+          <select id="scrollMode">
+            <option value="dock">Keep video docked</option>
+            <option value="off">Normal YouTube</option>
+          </select>
+        </div>
+        <div>
+          <label for="dockSize">Dock size</label>
+          <select id="dockSize">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="check-row">
+        <span>
+          <strong>Calm reading mode</strong>
+          <small>Softens ambient while reading comments.</small>
+        </span>
+        <input id="readingCalm" type="checkbox">
+      </label>
+
+      <label class="check-row">
+        <span>
+          <strong>Glass comments</strong>
+          <small>Keeps comments readable without hiding the scene.</small>
+        </span>
+        <input id="commentGlass" type="checkbox">
+      </label>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">Ambient look</div>
+      <label for="brightness">Brightness <output id="brightnessValue"></output></label>
       <input id="brightness" type="range" min="20" max="100" step="1">
 
-      <label for="blur">Blur <output id="blurValue"></output></label>
+      <label for="blur">Softness <output id="blurValue"></output></label>
       <input id="blur" type="range" min="12" max="80" step="1">
 
       <div class="grid">
         <div>
           <label for="fps">Render FPS</label>
           <select id="fps">
-            <option value="2">2 FPS</option>
-            <option value="4">4 FPS</option>
-            <option value="6">6 FPS</option>
-            <option value="10">10 FPS</option>
+            <option value="2">2 — Eco</option>
+            <option value="4">4 — Balanced</option>
+            <option value="6">6 — Smooth</option>
+            <option value="10">10 — Max</option>
           </select>
         </div>
         <div>
-          <label for="quality">Quality</label>
+          <label for="quality">Canvas</label>
           <select id="quality">
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -54,12 +94,16 @@
     </section>
 
     <section class="actions">
-      <button id="toggleFocus" type="button">Toggle focus</button>
-      <button id="reset" type="button" class="secondary">Reset defaults</button>
+      <button id="toggleDock" type="button">Dock / undock</button>
+      <button id="toggleFocus" type="button">Focus fill</button>
+      <button id="reset" type="button" class="secondary wide">Reset defaults</button>
     </section>
 
-    <p id="status" role="status" aria-live="polite"></p>
-    <p class="hint">Esc exits Focus fill. Default: 4 FPS, medium canvas budget.</p>
+    <div class="status-row">
+      <span id="liveDot" class="dot"></span>
+      <p id="status" role="status" aria-live="polite"></p>
+    </div>
+    <p class="hint">Alt+Shift+D toggles dock · Alt+Shift+A toggles ambient · Esc exits Focus fill.</p>
   </main>
   <script src="helpers.js"></script>
   <script src="popup.js"></script>

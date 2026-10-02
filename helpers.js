@@ -8,10 +8,14 @@
   const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
     mode: "ambient",
-    brightness: 52,
+    brightness: 50,
     blur: 42,
     fps: 4,
-    quality: "medium"
+    quality: "medium",
+    scrollMode: "dock",
+    dockSize: "medium",
+    readingCalm: true,
+    commentGlass: true
   });
 
   const QUALITY_PIXELS = Object.freeze({
@@ -35,29 +39,57 @@
       ? source.quality
       : DEFAULT_SETTINGS.quality;
     const mode = source.mode === "focus" ? "focus" : "ambient";
+    const scrollMode = source.scrollMode === "off" ? "off" : "dock";
+    const dockSize = ["small", "medium", "large"].includes(source.dockSize)
+      ? source.dockSize
+      : DEFAULT_SETTINGS.dockSize;
+
     return {
       enabled: source.enabled === undefined ? DEFAULT_SETTINGS.enabled : Boolean(source.enabled),
       mode,
       brightness: Math.round(clamp(source.brightness ?? DEFAULT_SETTINGS.brightness, 20, 100)),
       blur: Math.round(clamp(source.blur ?? DEFAULT_SETTINGS.blur, 12, 80)),
       fps,
-      quality
+      quality,
+      scrollMode,
+      dockSize,
+      readingCalm: source.readingCalm === undefined ? DEFAULT_SETTINGS.readingCalm : Boolean(source.readingCalm),
+      commentGlass: source.commentGlass === undefined ? DEFAULT_SETTINGS.commentGlass : Boolean(source.commentGlass)
     };
   }
 
-  function computeCanvasSize(videoWidth, videoHeight, quality) {
+  function computeCanvasSize(videoWidth, videoHeight, quality, softness = 12) {
     const w = Math.max(1, Number(videoWidth) || 16);
     const h = Math.max(1, Number(videoHeight) || 9);
     const budget = QUALITY_PIXELS[quality] || QUALITY_PIXELS.medium;
-    const scale = Math.min(1, Math.sqrt(budget / (w * h)));
+    const baseScale = Math.min(1, Math.sqrt(budget / (w * h)));
+    const soft = clamp(softness, 12, 80);
+    const softnessScale = 1 - ((soft - 12) / 68) * 0.55;
+    const scale = Math.min(1, baseScale * softnessScale);
     const even = (n) => Math.max(2, Math.round(n / 2) * 2);
-    return { width: even(w * scale), height: even(h * scale), maxPixels: budget };
+    return {
+      width: even(w * scale),
+      height: even(h * scale),
+      maxPixels: budget,
+      softnessScale: Number(softnessScale.toFixed(3))
+    };
   }
 
   function shouldDrawFrame(nowMs, lastDrawMs, fps) {
     const rate = [2, 4, 6, 10].includes(Number(fps)) ? Number(fps) : DEFAULT_SETTINGS.fps;
     if (!Number.isFinite(lastDrawMs) || lastDrawMs <= 0) return true;
     return Number(nowMs) - Number(lastDrawMs) >= (1000 / rate) * 0.95;
+  }
+
+  function computeScrollPresentation(scrollY, playerBottom, settings, currentlyDocked) {
+    const s = normalizeSettings(settings);
+    const y = Math.max(0, Number(scrollY) || 0);
+    const bottom = Number(playerBottom);
+    const reading = y >= 180;
+    if (s.scrollMode === "off") return { reading, dock: false };
+    if (currentlyDocked && y < 140) return { reading, dock: false };
+    if (currentlyDocked) return { reading, dock: true };
+    return { reading, dock: Number.isFinite(bottom) ? bottom < 72 && y > 180 : y > 520 };
   }
 
   function getVideoId(urlLike) {
@@ -104,6 +136,7 @@
     normalizeSettings,
     computeCanvasSize,
     shouldDrawFrame,
+    computeScrollPresentation,
     getVideoId,
     isEligibleYouTubeUrl,
     getThumbnailUrl,

@@ -1,5 +1,5 @@
 #ytfb-root {
-  --ytfb-brightness: 0.52;
+  --ytfb-brightness: 0.50;
   --ytfb-blur: 42px;
   position: fixed;
   inset: 0;
@@ -8,11 +8,12 @@
   z-index: 0;
   background: #050505;
   opacity: 0;
-  transition: opacity 180ms ease;
+  transition: opacity 220ms ease;
   contain: strict;
 }
 
-html.ytfb-active #ytfb-root { opacity: 1; }
+html.ytfb-active #ytfb-root { opacity: 0.88; }
+html.ytfb-active.ytfb-reading #ytfb-root { opacity: 0.56; }
 
 #ytfb-root .ytfb-fallback,
 #ytfb-root canvas {
@@ -26,13 +27,16 @@ html.ytfb-active #ytfb-root { opacity: 1; }
 }
 
 #ytfb-root canvas {
-  filter: brightness(var(--ytfb-brightness));
+  filter:
+    brightness(var(--ytfb-brightness))
+    saturate(1.25);
 }
 
 #ytfb-root .ytfb-fallback {
   opacity: 0;
-  filter: blur(var(--ytfb-blur)) brightness(var(--ytfb-brightness)) saturate(1.3);
+  filter: blur(var(--ytfb-blur)) brightness(var(--ytfb-brightness)) saturate(1.25);
 }
+
 #ytfb-root.ytfb-static .ytfb-fallback { opacity: 1; }
 #ytfb-root.ytfb-static canvas { opacity: 0; }
 
@@ -40,14 +44,25 @@ html.ytfb-active #ytfb-root { opacity: 1; }
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 50% 20%, transparent 0 28%, rgba(0,0,0,.18) 62%, rgba(0,0,0,.55) 100%),
-    linear-gradient(to bottom, rgba(0,0,0,.08), rgba(0,0,0,.36));
+    radial-gradient(circle at 50% 18%, transparent 0 24%, rgba(0,0,0,.16) 58%, rgba(0,0,0,.58) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,.05), rgba(0,0,0,.34));
+  transition: background 220ms ease;
+}
+
+html.ytfb-reading #ytfb-root .ytfb-shade {
+  background:
+    radial-gradient(circle at 50% 12%, transparent 0 20%, rgba(0,0,0,.24) 55%, rgba(0,0,0,.68) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,.18), rgba(0,0,0,.46));
 }
 
 html.ytfb-active,
-html.ytfb-active body { background: #050505 !important; }
+html.ytfb-active body {
+  background: #050505 !important;
+}
 
-html.ytfb-active body { isolation: isolate; }
+html.ytfb-active body {
+  isolation: isolate;
+}
 
 html.ytfb-active ytd-app {
   position: relative !important;
@@ -64,7 +79,23 @@ html.ytfb-active #secondary {
   background: transparent !important;
 }
 
-html.ytfb-focus body { overflow: hidden !important; }
+/* One calm translucent panel instead of blurring every comment card. */
+html.ytfb-active.ytfb-comment-glass #comments {
+  background: color-mix(
+    in srgb,
+    var(--yt-spec-base-background, #0f0f0f) 80%,
+    transparent
+  ) !important;
+  border: 1px solid color-mix(in srgb, currentColor 9%, transparent);
+  border-radius: 18px;
+  padding: 12px 16px 18px;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, .18);
+}
+
+/* Full browser-viewport focus mode. Escape restores the normal page. */
+html.ytfb-focus body {
+  overflow: hidden !important;
+}
 
 html.ytfb-focus #movie_player {
   position: fixed !important;
@@ -72,7 +103,8 @@ html.ytfb-focus #movie_player {
   width: 100vw !important;
   height: 100vh !important;
   z-index: 2147483646 !important;
-  background: transparent !important;
+  background: #000 !important;
+  border-radius: 0 !important;
 }
 
 html.ytfb-focus #movie_player video.html5-main-video {
@@ -88,6 +120,65 @@ html.ytfb-focus #movie_player .ytp-chrome-bottom {
   width: calc(100% - 24px) !important;
 }
 
+/*
+ * Scroll Dock keeps the existing YouTube player interactive while comments and
+ * recommendations remain scrollable. No duplicate <video> or extra decoder.
+ */
+html.ytfb-docked #movie_player {
+  position: fixed !important;
+  inset: auto 18px 18px auto !important;
+  aspect-ratio: 16 / 9 !important;
+  z-index: 2147483645 !important;
+  background: #000 !important;
+  border: 1px solid rgba(255,255,255,.15) !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  box-shadow: 0 18px 60px rgba(0,0,0,.52), 0 0 0 1px rgba(0,0,0,.35);
+  transition: width 160ms ease, height 160ms ease, box-shadow 160ms ease;
+}
+
+html.ytfb-docked.ytfb-dock-small #movie_player {
+  width: min(34vw, 360px) !important;
+  height: auto !important;
+}
+
+html.ytfb-docked.ytfb-dock-medium #movie_player {
+  width: min(43vw, 500px) !important;
+  height: auto !important;
+}
+
+html.ytfb-docked.ytfb-dock-large #movie_player {
+  width: min(54vw, 640px) !important;
+  height: auto !important;
+}
+
+html.ytfb-docked #movie_player video.html5-main-video {
+  width: 100% !important;
+  height: 100% !important;
+  left: 0 !important;
+  top: 0 !important;
+  object-fit: contain !important;
+}
+
+html.ytfb-docked #movie_player .ytp-chrome-bottom {
+  left: 10px !important;
+  width: calc(100% - 20px) !important;
+}
+
+@media (max-width: 820px) {
+  html.ytfb-docked #movie_player {
+    right: 10px !important;
+    bottom: 10px !important;
+    width: calc(100vw - 20px) !important;
+    max-width: 520px !important;
+    border-radius: 12px !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  #ytfb-root { transition: none; }
+  #ytfb-root,
+  #ytfb-root .ytfb-shade,
+  html.ytfb-docked #movie_player {
+    transition: none;
+  }
 }
