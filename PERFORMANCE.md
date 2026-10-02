@@ -40,7 +40,28 @@ Short samples varied with YouTube loading, ads, caching, and renderer lifecycle.
 | Baseline, post-reload/warm | 0.195% | 6.25% | 1156.7 MB | 570.3 MB |
 | Ambient, warmed 15 s | 1.992% | 63.75% | 1248.5 MB | 522.7 MB |
 
-In these short local runs, the ambient effect kept the isolated Chrome process group around **2.0–2.3% of total CPU capacity** on this 32-thread VM. The apparent incremental cost varied by page state, roughly **+0.9 to +1.8 percentage points of whole-VM CPU**.
+In these short local runs, the ambient effect kept the isolated Chrome process group around **2.0â€“2.3% of total CPU capacity** on this 32-thread VM. The apparent incremental cost varied by page state, roughly **+0.9 to +1.8 percentage points of whole-VM CPU**.
+
+### v1.2 masthead audit
+
+The first v1.2 prototype used a continuously pulsing logo halo. On the VMware graphics stack that version repeatedly sampled around **3.6–3.7% whole-VM CPU**, so it was rejected. The shipped design keeps the red halo static at idle and animates only on hover/focus, and the brand-health path no longer calls getComputedStyle() / getBoundingClientRect() from the mutation loop.
+
+A later same-profile audit pass measured:
+
+| Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
+|---|---:|---:|---:|---:|
+| YouTube baseline after reload | 0.259% | 8.28% | 1037.7 MB | 551.3 MB |
+| Ambient + static/hover logo treatment | 2.285% | 73.12% | 1347.3 MB | 555.3 MB |
+
+The large working-set difference is Chrome cache/renderer noise; private bytes differed by only about 4 MB in that particular pair. CPU still fluctuates substantially with YouTube playback, so treat this as an observed VM sample rather than a portable extension-only benchmark.
+
+A 30-second follow-up with the final static/hover logo treatment showed no monotonic private-memory growth:
+
+520.9 → 512.2 → 507.5 → 512.7 MB
+
+Working set also trended down during that run:
+
+1299.1 → 1283.6 → 1240.4 → 1212.4 MB
 
 That is not a universal number. A physical Intel/AMD/NVIDIA GPU, another codec, display scaling, source resolution, or browser version can move it substantially.
 
@@ -77,7 +98,7 @@ The implementation limits GPU pressure structurally:
 ## Practical presets
 
 - **Medium / 4 FPS**: default balance used for the runtime checks.
-- **Low / 2–4 FPS**: best for laptops, battery use, VMs, remote desktops, or already-heavy YouTube pages.
+- **Low / 2â€“4 FPS**: best for laptops, battery use, VMs, remote desktops, or already-heavy YouTube pages.
 - **6 FPS**: smoother ambient motion with moderate extra work.
 - **High / 10 FPS**: intentionally expensive; use only when the machine has headroom.
 

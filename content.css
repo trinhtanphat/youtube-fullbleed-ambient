@@ -70,6 +70,140 @@ html.ytfb-active ytd-app {
   background: transparent !important;
 }
 
+/*
+ * Masthead polish: keep YouTube's real logo and controls, then add a cheap
+ * translucent treatment. No backdrop-filter or full-width animated blur.
+ */
+html.ytfb-active #masthead-container {
+  background: color-mix(
+    in srgb,
+    var(--yt-spec-base-background, #0f0f0f) 86%,
+    transparent
+  ) !important;
+  border-bottom: 1px solid color-mix(in srgb, #ff0033 24%, transparent);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.035),
+    0 10px 28px rgba(0,0,0,.16);
+}
+
+html.ytfb-active ytd-masthead#masthead {
+  background:
+    linear-gradient(
+      100deg,
+      rgba(255,0,51,.08) 0%,
+      transparent 24%,
+      transparent 74%,
+      rgba(255,0,51,.035) 100%
+    ) !important;
+}
+
+html.ytfb-active ytd-masthead#masthead #start,
+html.ytfb-active ytd-masthead#masthead #center,
+html.ytfb-active ytd-masthead#masthead #end {
+  position: relative;
+  z-index: 1;
+}
+
+html.ytfb-active .ytfb-logo-anchor {
+  display: flex !important;
+  position: relative !important;
+  isolation: isolate;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html.ytfb-active .ytfb-logo-anchor::before {
+  content: "";
+  position: absolute;
+  inset: 9px 2px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 28% 50%, rgba(255,0,51,.24), transparent 48%),
+    linear-gradient(90deg, rgba(255,0,51,.08), transparent 72%);
+  opacity: .48;
+  transform: scale(.94);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+html.ytfb-active .ytfb-logo-anchor > a#logo {
+  position: relative;
+  z-index: 1;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html.ytfb-active .ytfb-logo-anchor #logo-icon {
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: drop-shadow(0 0 7px rgba(255,0,51,.16));
+}
+
+#ytfb-brand-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 11px;
+  color: var(--yt-spec-text-primary, #fff);
+  text-decoration: none;
+  white-space: nowrap;
+  position: relative;
+  isolation: isolate;
+}
+
+#ytfb-brand-fallback::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  border-radius: 10px;
+  background: radial-gradient(circle at 20% 50%, rgba(255,0,51,.22), transparent 68%);
+  opacity: .62;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+#ytfb-brand-fallback .ytfb-brand-play {
+  position: relative;
+  width: 30px;
+  height: 21px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background: #ff0033;
+  box-shadow: 0 0 12px rgba(255,0,51,.18);
+}
+
+#ytfb-brand-fallback .ytfb-brand-play::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 6px;
+  width: 0;
+  height: 0;
+  border-top: 4.5px solid transparent;
+  border-bottom: 4.5px solid transparent;
+  border-left: 7px solid #fff;
+}
+
+#ytfb-brand-fallback .ytfb-brand-word {
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.045em;
+  line-height: 1;
+}
+
+html.ytfb-active .ytfb-logo-anchor:hover::before,
+html.ytfb-active .ytfb-logo-anchor:focus-within::before,
+#ytfb-brand-fallback:hover::before,
+#ytfb-brand-fallback:focus-visible::before {
+  opacity: .74;
+  transform: scale(1);
+}
+
 html.ytfb-active ytd-watch-flexy,
 html.ytfb-active #content.ytd-app,
 html.ytfb-active #page-manager,
@@ -180,5 +314,32 @@ html.ytfb-docked #movie_player .ytp-chrome-bottom {
   #ytfb-root .ytfb-shade,
   html.ytfb-docked #movie_player {
     transition: none;
+  }
+
+  html.ytfb-active .ytfb-logo-anchor::before,
+  #ytfb-brand-fallback::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  html.ytfb-active #masthead-container {
+    border-bottom: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  html.ytfb-active .ytfb-logo-anchor::before,
+  #ytfb-brand-fallback::before {
+    display: none;
+  }
+
+  #ytfb-brand-fallback {
+    color: LinkText;
+    border: 1px solid CanvasText;
+  }
+
+  #ytfb-brand-fallback .ytfb-brand-play {
+    background: Highlight;
+    box-shadow: none;
   }
 }

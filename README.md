@@ -2,13 +2,17 @@
 
 A lightweight Chrome/Edge Manifest V3 extension that turns the currently playing YouTube video into a full-page ambient scene **without starting a second video decoder**.
 
-Version 1.1 adds a scroll-first experience so the effect stays useful after the novelty wears off: the real YouTube player can remain interactive in a dock while you read comments, and the ambient background automatically calms down instead of fighting the text.
+Version 1.2 adds a polished YouTube masthead/logo treatment plus lifecycle fixes on top of the scroll-first experience: the native player stays interactive in a dock while you read comments, the ambient background calms down around text, and the top bar keeps a visible YouTube brand without adding a second video layer.
 
 ## Experience
 
 ### Ambient page
 
 The current video is sampled into one low-resolution canvas and stretched behind the YouTube page. YouTube controls, recommendations, comments, navigation, and video switching stay native.
+
+### YouTube masthead + logo
+
+The native YouTube masthead stays clickable and gains a lightweight translucent treatment, red hairline, and subtle static/hover logo glow. The extension prefers YouTube's real logo; if a YouTube experiment temporarily hides or delays it, a small accessible fallback YouTube home mark appears and is automatically removed when the native logo returns. The effect uses gradients/opacity/transform only — no full-width animated blur or backdrop-filter.
 
 ### Scroll Dock
 
@@ -24,7 +28,7 @@ No duplicate `<video>` element is created.
 
 ### Calm reading mode
 
-Once you scroll into the reading area, ambient intensity automatically softens. This reduces the “busy wallpaper” feeling that makes many ambient extensions fun for a few minutes but tiring long-term.
+Once you scroll into the reading area, ambient intensity automatically softens. This reduces the â€œbusy wallpaperâ€ feeling that makes many ambient extensions fun for a few minutes but tiring long-term.
 
 ### Glass comments
 
@@ -37,7 +41,7 @@ Focus fill expands the real YouTube player to the browser viewport. Press **Esc*
 ## Performance design
 
 - Reuses the existing YouTube `<video>`; no duplicate network stream or decoder.
-- Default effective canvas is approximately **484×272** at Softness 42 (Medium quality).
+- Default effective canvas is approximately **484Ã—272** at Softness 42 (Medium quality).
 - Softness is implemented by dynamic downsampling instead of a costly live Gaussian blur.
 - Default refresh is **4 FPS**.
 - Available FPS presets: 2 / 4 / 6 / 10.
@@ -86,9 +90,9 @@ The popup contains:
 
 Keyboard shortcuts implemented inside YouTube pages:
 
-- `Alt+Shift+D` — dock / undock.
-- `Alt+Shift+A` — enable / disable ambient.
-- `Esc` — leave Focus fill.
+- `Alt+Shift+D` â€” dock / undock.
+- `Alt+Shift+A` â€” enable / disable ambient.
+- `Esc` â€” leave Focus fill.
 
 ## Tests
 
@@ -103,9 +107,10 @@ For a local browser already exposing a CDP debugging port:
 ```powershell
 node scripts/cdp-inject.js 9244
 node scripts/cdp-ux-smoke.js 9244
+node scripts/cdp-dom-audit.js 9244
 ```
 
-The UX smoke verifies: ambient activation, the default 484×272 effective canvas, scroll-triggered docking, reading mode, fixed player positioning, and clean undocking when returning to the top.
+The UX smoke verifies: ambient activation, the default 484x272 effective canvas, native-logo accent and click target, accessible logo fallback/recovery, Focus-fill state stability across settings changes, scroll-triggered docking, reading mode, fixed player positioning, leave/return lifecycle cleanup, and clean undocking when returning to the top.
 
 No GitHub Actions are required.
 
@@ -123,11 +128,11 @@ No analytics, tracking, remote scripts, accounts, or external services are used 
 
 ## Files worth reading
 
-- `content.js` — lifecycle, rendering, SPA handling, scroll dock.
-- `content.css` — ambient, reading, comments, focus and dock presentation.
-- `helpers.js` — pure settings, throttling and geometry helpers.
-- `PERFORMANCE.md` — benchmark notes.
-- `SECURITY.md` — security posture.
+- `content.js` â€” lifecycle, rendering, SPA handling, scroll dock.
+- `content.css` â€” ambient, reading, comments, focus and dock presentation.
+- `helpers.js` â€” pure settings, throttling and geometry helpers.
+- `PERFORMANCE.md` â€” benchmark notes.
+- `SECURITY.md` â€” security posture.
 
 ## License
 
