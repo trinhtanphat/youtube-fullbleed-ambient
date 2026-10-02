@@ -12,6 +12,15 @@
     fallback: null,
     video: null,
     brandLogo: null,
+    topbarCanvas: null,
+    topbarCtx: null,
+    lastTopbarDraw: 0,
+    adRestore: null,
+    adTimer: null,
+    adSkipClicks: 0,
+    adAccelerations: 0,
+    adObserver: null,
+    adObservedPlayer: null,
     observer: null,
     observing: false,
     timerId: null,
@@ -58,6 +67,72 @@
     state.root.classList.toggle("ytfb-static", state.drawFailed);
   }
 
+  function clearTopbarVideoSurface() {
+    state.topbarCanvas?.remove();
+    state.topbarCanvas = null;
+    state.topbarCtx = null;
+    state.lastTopbarDraw = 0;
+    document.documentElement.classList.remove("ytfb-topbar-video-enabled");
+  }
+
+  function ensureTopbarVideoSurface() {
+    if (!state.active || !state.settings.topbarVideo) {
+      clearTopbarVideoSurface();
+      return null;
+    }
+
+    const container = document.querySelector("#masthead-container");
+    if (!container) return null;
+    if (state.topbarCanvas?.isConnected && state.topbarCanvas.parentElement === container) {
+      return state.topbarCanvas;
+    }
+
+    state.topbarCanvas?.remove();
+    const canvas = document.createElement("canvas");
+    canvas.id = "ytfb-topbar-video";
+    canvas.width = 384;
+    canvas.height = 24;
+    canvas.setAttribute("aria-hidden", "true");
+    container.prepend(canvas);
+
+    state.topbarCanvas = canvas;
+    state.topbarCtx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    state.lastTopbarDraw = 0;
+    return canvas;
+  }
+
+  function drawTopbarFrame(video, now, force = false) {
+    if (!state.settings.topbarVideo || !video || video.readyState < 2) return;
+    if (!force && now - state.lastTopbarDraw < 450) return;
+
+    const canvas = ensureTopbarVideoSurface();
+    const ctx = state.topbarCtx;
+    if (!canvas || !ctx || !video.videoWidth || !video.videoHeight) return;
+
+    const sourceRatio = video.videoWidth / video.videoHeight;
+    const targetRatio = canvas.width / canvas.height;
+    let sx = 0;
+    let sy = 0;
+    let sw = video.videoWidth;
+    let sh = video.videoHeight;
+
+    if (sourceRatio < targetRatio) {
+      sh = sw / targetRatio;
+      sy = (video.videoHeight - sh) / 2;
+    } else {
+      sw = sh * targetRatio;
+      sx = (video.videoWidth - sw) / 2;
+    }
+
+    try {
+      ctx.filter = "none";
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      state.lastTopbarDraw = now;
+    } catch {
+      // The main ambient fallback handles transient draw/cross-origin failures.
+    }
+  }
+
   function setVisualSettings() {
     const root = ensureRoot();
     root.style.setProperty("--ytfb-brightness", String(state.settings.brightness / 100));
@@ -65,6 +140,8 @@
 
     const html = document.documentElement;
     html.classList.toggle("ytfb-comment-glass", state.settings.commentGlass);
+    html.classList.toggle("ytfb-topbar-video-enabled", state.active && state.settings.topbarVideo);
+    html.classList.toggle("ytfb-ad-shield", state.settings.enabled && state.settings.adBlock);
     html.classList.remove("ytfb-dock-small", "ytfb-dock-medium", "ytfb-dock-large");
     html.classList.add("ytfb-dock-" + state.settings.dockSize);
   }
@@ -105,6 +182,7 @@
     try {
       state.ctx.filter = "none";
       state.ctx.drawImage(video, 0, 0, state.canvas.width, state.canvas.height);
+      drawTopbarFrame(video, now);
       state.lastDraw = now;
       if (state.drawFailed) {
         state.drawFailed = false;
@@ -158,9 +236,159 @@
     if (video && video !== state.video) attachVideo(video);
   }
 
+  const AD_SKIP_SELECTORS = [
+    ".ytp-skip-ad-button",
+    ".ytp-ad-skip-button",
+    ".ytp-ad-skip-button-modern",
+    "button[class*='skip-ad']"
+  ];
+
+  const AD_CLOSE_SELECTORS = [
+    ".ytp-ad-overlay-close-button",
+    ".ytp-ad-overlay-close-container button"
+  ];
+
+  function restoreAdPlayback() {
+    if (state.adTimer !== null) {
+      clearTimeout(state.adTimer);
+      state.adTimer = null;
+    }
+
+    const restore = state.adRestore;
+    if (!restore) return;
+    state.adRestore = null;
+
+    if (restore.video?.isConnected) {
+      try {
+        restore.video.playbackRate = restore.playbackRate;
+        restore.video.muted = restore.muted;
+      } catch {
+        // YouTube may replace the media element between the ad and content.
+      }
+    }
+  }
+
+  function keepAdAccelerated() {
+    if (!state.settings.enabled || !state.settings.adBlock || !state.adRestore) {
+      restoreAdPlayback();
+      return;
+    }
+
+    const player = document.querySelector("#movie_player");
+    const adShowing = Boolean(
+      player?.classList.contains("ad-showing") ||
+      player?.classList.contains("ad-interrupting")
+    );
+    if (!adShowing) {
+      restoreAdPlayback();
+      return;
+    }
+
+    const video = state.adRestore.video;
+    if (!video?.isConnected) {
+      restoreAdPlayback();
+      return;
+    }
+
+    try {
+      video.muted = true;
+      video.playbackRate = 16;
+    } catch {
+      restoreAdPlayback();
+      return;
+    }
+
+    state.adTimer = setTimeout(keepAdAccelerated, 180);
+  }
+
+  function clickFirstVisible(selectors) {
+    for (const selector of selectors) {
+      for (const element of document.querySelectorAll(selector)) {
+        const rect = element.getBoundingClientRect();
+        if (rect.width < 1 || rect.height < 1) continue;
+        element.click();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function cleanupAds() {
+    document.documentElement.classList.toggle("ytfb-ad-shield", state.settings.enabled && state.settings.adBlock);
+    if (!state.settings.enabled || !state.settings.adBlock) {
+      restoreAdPlayback();
+      return;
+    }
+
+    const player = document.querySelector("#movie_player");
+    const adShowing = Boolean(
+      player?.classList.contains("ad-showing") ||
+      player?.classList.contains("ad-interrupting")
+    );
+
+    if (!adShowing) {
+      restoreAdPlayback();
+      return;
+    }
+
+    clickFirstVisible(AD_CLOSE_SELECTORS);
+
+    if (clickFirstVisible(AD_SKIP_SELECTORS)) {
+      state.adSkipClicks += 1;
+      return;
+    }
+
+    const video = state.video;
+    if (!video || video.readyState < 2 || state.adRestore) return;
+
+    state.adRestore = {
+      video,
+      muted: video.muted,
+      playbackRate: video.playbackRate
+    };
+
+    try {
+      video.muted = true;
+      video.playbackRate = 16;
+      state.adAccelerations += 1;
+      state.adTimer = setTimeout(keepAdAccelerated, 180);
+    } catch {
+      restoreAdPlayback();
+    }
+  }
+
+  function stopAdObserver() {
+    state.adObserver?.disconnect();
+    state.adObservedPlayer = null;
+  }
+
+  function syncAdObserver() {
+    if (!state.settings.enabled || !state.settings.adBlock) {
+      stopAdObserver();
+      return;
+    }
+
+    const player = document.querySelector("#movie_player");
+    if (!player) {
+      stopAdObserver();
+      return;
+    }
+    if (state.adObservedPlayer === player) return;
+
+    stopAdObserver();
+    state.adObserver ||= new MutationObserver(cleanupAds);
+    state.adObserver.observe(player, {
+      attributes: true,
+      attributeFilter: ["class"],
+      childList: true,
+      subtree: true
+    });
+    state.adObservedPlayer = player;
+  }
 
   function clearTopbarBrand() {
     document.getElementById("ytfb-brand-fallback")?.remove();
+    clearTopbarVideoSurface();
     state.brandLogo?.classList.remove("ytfb-logo-anchor");
     document.querySelectorAll("ytd-topbar-logo-renderer.ytfb-logo-anchor")
       .forEach((logo) => logo.classList.remove("ytfb-logo-anchor"));
@@ -173,6 +401,7 @@
       return;
     }
 
+    ensureTopbarVideoSurface();
     const masthead = document.querySelector("ytd-masthead#masthead");
     if (!masthead) return;
 
@@ -297,6 +526,9 @@
     startObserver();
     findAndAttachVideo();
     syncTopbarBrand();
+    syncAdObserver();
+    cleanupAds();
+    if (state.video) drawTopbarFrame(state.video, performance.now(), true);
 
     if (applyStartupMode) applyFocusPreference();
     else if (state.settings.mode !== "focus" && state.focus) exitFocus();
@@ -314,15 +546,19 @@
     exitFocus();
     setDocked(false);
     clearTopbarBrand();
+    restoreAdPlayback();
     document.documentElement.classList.remove(
       "ytfb-active",
       "ytfb-reading",
       "ytfb-comment-glass",
+      "ytfb-topbar-video-enabled",
       "ytfb-dock-small",
       "ytfb-dock-medium",
       "ytfb-dock-large"
     );
     if (state.root) state.root.classList.remove("ytfb-static");
+    syncAdObserver();
+    cleanupAds();
   }
 
   function syncPage(applyStartupMode = false) {
@@ -343,6 +579,9 @@
 
     setVisualSettings();
     syncTopbarBrand();
+    syncAdObserver();
+    cleanupAds();
+    if (state.video) drawTopbarFrame(state.video, performance.now(), true);
     if (state.settings.mode !== "focus" && state.focus) exitFocus();
     setDocked(state.docked);
     findAndAttachVideo();
@@ -367,7 +606,12 @@
       const logoNeedsSync = !state.brandLogo?.isConnected ||
         !state.brandLogo.closest("ytd-masthead#masthead") ||
         document.getElementById("ytfb-brand-fallback");
-      if (logoNeedsSync) syncTopbarBrand();
+      const topbarNeedsSync = state.settings.topbarVideo &&
+        (!state.topbarCanvas?.isConnected ||
+          state.topbarCanvas.parentElement !== document.querySelector("#masthead-container"));
+      if (logoNeedsSync || topbarNeedsSync) syncTopbarBrand();
+      if (state.adObservedPlayer !== document.querySelector("#movie_player")) syncAdObserver();
+      cleanupAds();
     }, 250);
   }
 
@@ -375,6 +619,9 @@
     if (document.hidden) cancelRenderLoop();
     else if (state.active) {
       findAndAttachVideo();
+      syncAdObserver();
+      cleanupAds();
+      if (state.video) drawTopbarFrame(state.video, performance.now(), true);
       scheduleRender();
       queueScrollPresentation();
     }
@@ -452,6 +699,11 @@
           reading: document.documentElement.classList.contains("ytfb-reading"),
           drawing: Boolean(state.timerId !== null),
           canvas: state.canvas ? { width: state.canvas.width, height: state.canvas.height } : null,
+          topbarVideo: Boolean(state.topbarCanvas?.isConnected && state.settings.topbarVideo),
+          adBlock: Boolean(state.settings.adBlock),
+          adSkips: state.adSkipClicks,
+          adAccelerations: state.adAccelerations,
+          adAccelerating: Boolean(state.adRestore),
           drawFailed: state.drawFailed
         });
       }

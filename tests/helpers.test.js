@@ -13,7 +13,9 @@ test("normalizeSettings clamps and validates", () => {
     scrollMode: "wat",
     dockSize: "giant",
     readingCalm: 0,
-    commentGlass: 0
+    commentGlass: 0,
+    topbarVideo: 0,
+    adBlock: 0
   });
   assert.equal(s.enabled, false);
   assert.equal(s.mode, "ambient");
@@ -25,6 +27,8 @@ test("normalizeSettings clamps and validates", () => {
   assert.equal(s.dockSize, "medium");
   assert.equal(s.readingCalm, false);
   assert.equal(s.commentGlass, false);
+  assert.equal(s.topbarVideo, false);
+  assert.equal(s.adBlock, false);
 });
 
 test("new experience defaults preserve useful scroll behavior", () => {
@@ -33,6 +37,8 @@ test("new experience defaults preserve useful scroll behavior", () => {
   assert.equal(s.dockSize, "medium");
   assert.equal(s.readingCalm, true);
   assert.equal(s.commentGlass, true);
+  assert.equal(s.topbarVideo, true);
+  assert.equal(s.adBlock, true);
 });
 
 test("canvas size respects pixel budget and aspect", () => {

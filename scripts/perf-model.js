@@ -2,7 +2,11 @@ const H = require("../helpers.js");
 
 const source = { width: 3840, height: 2160 };
 const softness = H.DEFAULT_SETTINGS.blur;
+const topbar = { width: 384, height: 24, fps: 2 };
+const topbarMpps = H.megapixelsPerSecond(topbar.width, topbar.height, topbar.fps);
+
 console.log(`softness=${softness} (dynamic downsample, no per-frame Gaussian blur)`);
+console.log(`topbar live strip: ${topbar.width}x${topbar.height} @ ~${topbar.fps} FPS = ${topbarMpps.toFixed(3)} MP/s`);
 for (const quality of ["low", "medium", "high"]) {
   const size = H.computeCanvasSize(source.width, source.height, quality, softness);
   for (const fps of [2, 4, 6, 10]) {

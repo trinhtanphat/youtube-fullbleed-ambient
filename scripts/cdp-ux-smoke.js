@@ -224,12 +224,14 @@ const path = require("node:path");
     const inactive = !document.documentElement.classList.contains("ytfb-active");
     const brandCleared = !document.getElementById("ytfb-brand-fallback") &&
       !document.querySelector(".ytfb-logo-anchor");
+    const adShieldOnHome = document.documentElement.classList.contains("ytfb-ad-shield");
 
     history.pushState({}, "", watchUrl);
     document.dispatchEvent(new Event("yt-navigate-finish", { bubbles: true }));
     return {
       inactive,
       brandCleared,
+      adShieldOnHome,
       activeAgain: document.documentElement.classList.contains("ytfb-active")
     };
   })())`));
@@ -257,7 +259,7 @@ const path = require("node:path");
   if (!(scrolled.y > 180) || !scrolled.docked || !scrolled.reading ||
       scrolled.playerPosition !== "fixed" || !scrolled.logoAccent) process.exitCode = 8;
   if (restored.docked || restored.reading) process.exitCode = 9;
-  if (!lifecycle.inactive || !lifecycle.brandCleared || !lifecycle.activeAgain) process.exitCode = 10;
+  if (!lifecycle.inactive || !lifecycle.brandCleared || !lifecycle.adShieldOnHome || !lifecycle.activeAgain) process.exitCode = 10;
 
   ws.close();
 })().catch((error) => {

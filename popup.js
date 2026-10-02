@@ -7,6 +7,8 @@
     "mode",
     "scrollMode",
     "dockSize",
+    "topbarVideo",
+    "adBlock",
     "readingCalm",
     "commentGlass",
     "brightness",
@@ -33,6 +35,8 @@
     els.mode.value = s.mode;
     els.scrollMode.value = s.scrollMode;
     els.dockSize.value = s.dockSize;
+    els.topbarVideo.checked = s.topbarVideo;
+    els.adBlock.checked = s.adBlock;
     els.readingCalm.checked = s.readingCalm;
     els.commentGlass.checked = s.commentGlass;
     els.brightness.value = String(s.brightness);
@@ -49,6 +53,8 @@
       mode: els.mode.value,
       scrollMode: els.scrollMode.value,
       dockSize: els.dockSize.value,
+      topbarVideo: els.topbarVideo.checked,
+      adBlock: els.adBlock.checked,
       readingCalm: els.readingCalm.checked,
       commentGlass: els.commentGlass.checked,
       brightness: Number(els.brightness.value),
@@ -63,6 +69,7 @@
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+
     const next = readForm();
     render(next);
     chrome.storage.sync.set({ ytfbSettings: next }, () => {
@@ -81,9 +88,10 @@
     return tab;
   }
 
-  async function send(message) {
+  async function sendToTab(message) {
     const tab = await activeTab();
     if (!tab?.id) return null;
+
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(tab.id, message, (response) => {
         if (chrome.runtime.lastError) resolve(null);
@@ -92,8 +100,21 @@
     });
   }
 
+  async function queryAdRuleStatus() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "ytfb-ad-rules-status" }, (response) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(response || null);
+      });
+    });
+  }
+
   async function queryStatus() {
-    const response = await send({ type: "ytfb-status" });
+    const [response, adRules] = await Promise.all([
+      sendToTab({ type: "ytfb-status" }),
+      queryAdRuleStatus()
+    ]);
+
     if (!response?.ok) {
       setStatus("Open a YouTube watch page", "warn");
       return;
@@ -105,8 +126,11 @@
     else parts.push("Ambient");
 
     if (response.reading) parts.push("calm");
-    if (response.canvas?.width) parts.push(response.canvas.width + "×" + response.canvas.height);
-    setStatus(parts.join(" · "), response.active ? "active" : "warn");
+    if (response.topbarVideo) parts.push("topbar live");
+    if (response.adBlock) parts.push(adRules?.enabled ? "Ad Shield" : "Ad Shield UI");
+    if (response.canvas?.width) parts.push(response.canvas.width + "x" + response.canvas.height);
+
+    setStatus(parts.join(" - "), response.active ? "active" : "warn");
   }
 
   for (const id of ids) {
@@ -129,7 +153,7 @@
   });
 
   document.getElementById("toggleFocus").addEventListener("click", async () => {
-    const response = await send({ type: "ytfb-toggle-focus" });
+    const response = await sendToTab({ type: "ytfb-toggle-focus" });
     if (!response?.ok) {
       setStatus("Open a YouTube watch page first", "warn");
       return;
@@ -138,7 +162,7 @@
   });
 
   document.getElementById("toggleDock").addEventListener("click", async () => {
-    const response = await send({ type: "ytfb-toggle-dock" });
+    const response = await sendToTab({ type: "ytfb-toggle-dock" });
     if (!response?.ok) {
       setStatus("Enable scroll dock on a watch page", "warn");
       return;

@@ -15,7 +15,9 @@
     scrollMode: "dock",
     dockSize: "medium",
     readingCalm: true,
-    commentGlass: true
+    commentGlass: true,
+    topbarVideo: true,
+    adBlock: true
   });
 
   const QUALITY_PIXELS = Object.freeze({
@@ -54,7 +56,9 @@
       scrollMode,
       dockSize,
       readingCalm: source.readingCalm === undefined ? DEFAULT_SETTINGS.readingCalm : Boolean(source.readingCalm),
-      commentGlass: source.commentGlass === undefined ? DEFAULT_SETTINGS.commentGlass : Boolean(source.commentGlass)
+      commentGlass: source.commentGlass === undefined ? DEFAULT_SETTINGS.commentGlass : Boolean(source.commentGlass),
+      topbarVideo: source.topbarVideo === undefined ? DEFAULT_SETTINGS.topbarVideo : Boolean(source.topbarVideo),
+      adBlock: source.adBlock === undefined ? DEFAULT_SETTINGS.adBlock : Boolean(source.adBlock)
     };
   }
 
