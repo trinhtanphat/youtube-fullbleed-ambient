@@ -1,10 +1,10 @@
 # Performance notes
 
-Performance is a design constraint, not an afterthought. The extension never creates a second network/video decoder. It samples the existing YouTube `<video>` into one bounded canvas and updates that canvas at a configurable low rate.
+Performance is a design constraint. The extension reuses YouTube's existing video element and never starts a second network stream or video decoder.
 
 ## Pixel budget
 
-The **Softness** control is intentionally cheap: it lowers the dynamic canvas resolution before the browser scales the image up. It does **not** run a Gaussian blur on every video frame. The static thumbnail fallback can still use CSS blur because it is not redrawn continuously.
+The main ambient layer downsamples the playing video into a bounded canvas. Softness lowers the dynamic canvas resolution instead of applying a full-resolution per-frame Gaussian blur.
 
 At the default Softness value (42), a 4K source is reduced to:
 
@@ -14,24 +14,56 @@ At the default Softness value (42), a 4K source is reduced to:
 | Medium | 484x272 | 0.263 MP/s | 0.527 MP/s | 0.790 MP/s | 1.316 MP/s |
 | High | 728x408 | 0.594 MP/s | 1.188 MP/s | 1.782 MP/s | 2.970 MP/s |
 
-The default is **Medium / 4 FPS / Softness 42**, or about **0.527 megapixels per second** of canvas copies.
+The default is **Medium / 4 FPS / Softness 42**, or about **0.527 megapixels per second** of ambient-canvas copies.
 
-## 181 runtime measurement
+## v1.3 live-video topbar
 
-Measured on the Windows 181 development VM:
+The live masthead effect adds a second **canvas surface**, but not a second media element or decoder. Its internal surface is only **384x24** and is refreshed at about **2 FPS** by piggybacking on the existing ambient render loop.
 
-- Windows build 10.0.26200
-- 32 logical CPUs
-- Chrome 153.0.8010.53
-- VMware SVGA 3D + Microsoft Remote Display Adapter
-- one isolated Chrome profile playing the same YouTube watch page
-- default Medium / 4 FPS / Softness 42 settings
+That is approximately:
 
-Stable branded Chrome in this environment did not activate the unpacked extension from the command-line flags used by the automated harness. For runtime checks, the harness therefore injected the exact packaged `helpers.js`, `content.js`, and `content.css` through Chrome DevTools Protocol with a tiny storage/runtime shim. This exercises the same content-runtime and rendering path, but the final packaging step should still be checked with **Load unpacked** in Chrome/Edge.
+**384 x 24 x 2 = 0.018 MP/s**
 
-### CPU/RAM A/B samples
+So the modeled topbar copy workload is only about 3.5% of the default ambient canvas copy workload. CSS then enlarges and blurs this tiny surface behind the real YouTube masthead.
 
-Short samples varied with YouTube loading, ads, caching, and renderer lifecycle. Two same-profile passes produced:
+The topbar canvas uses pointer-events none, while the real masthead controls remain in a higher stacking layer.
+
+## v1.3 Ad Shield runtime behavior
+
+Network blocking is handled by Manifest V3 declarative rules and adds no per-frame rendering work.
+
+Cosmetic hiding is ordinary CSS. In-player handling uses a dedicated observer on the YouTube player. If a skippable ad control appears, it is clicked. If YouTube reports an unskippable ad, a short-lived watchdog maintains mute + accelerated playback while that ad state is present, then stops and restores the previous playback rate when the state clears.
+
+The watchdog does not run during normal video playback.
+
+The browser runtime audit verifies:
+
+- live topbar canvas exists at 384x24;
+- topbar pointer events are disabled;
+- native masthead controls remain clickable;
+- simulated Skip Ad handling clears the ad state;
+- simulated unskippable-ad handling reaches 16x playback while active;
+- the ad watchdog reports inactive after the ad state is removed;
+- playback rate returns to its previous value.
+
+This test is synthetic because ad inventory is not deterministic. It tests the extension's handling path rather than claiming that a specific live ad campaign will always be present.
+
+## Windows 181 runtime measurement
+
+Earlier v1.2 measurements were taken on the Windows 181 development VM:
+
+- Windows build 10.0.26200;
+- 32 logical CPUs;
+- Chrome 153.0.8010.53;
+- VMware SVGA 3D + Microsoft Remote Display Adapter;
+- one isolated Chrome profile playing the same YouTube watch page;
+- default Medium / 4 FPS / Softness 42 settings.
+
+Stable branded Chrome in this environment did not reliably activate an unpacked extension from the command-line flags used by the harness. Runtime content checks therefore inject the exact packaged helpers.js, content.js, and content.css through Chrome DevTools Protocol with a tiny storage/runtime shim. The final packaging step should still be checked with **Load unpacked** or **Reload** in Chrome/Edge.
+
+### Earlier CPU/RAM samples
+
+Short samples varied with YouTube loading, ads, caching, and renderer lifecycle:
 
 | Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
 |---|---:|---:|---:|---:|
@@ -40,36 +72,18 @@ Short samples varied with YouTube loading, ads, caching, and renderer lifecycle.
 | Baseline, post-reload/warm | 0.195% | 6.25% | 1156.7 MB | 570.3 MB |
 | Ambient, warmed 15 s | 1.992% | 63.75% | 1248.5 MB | 522.7 MB |
 
-In these short local runs, the ambient effect kept the isolated Chrome process group around **2.0â€“2.3% of total CPU capacity** on this 32-thread VM. The apparent incremental cost varied by page state, roughly **+0.9 to +1.8 percentage points of whole-VM CPU**.
-
-### v1.2 masthead audit
-
-The first v1.2 prototype used a continuously pulsing logo halo. On the VMware graphics stack that version repeatedly sampled around **3.6–3.7% whole-VM CPU**, so it was rejected. The shipped design keeps the red halo static at idle and animates only on hover/focus, and the brand-health path no longer calls getComputedStyle() / getBoundingClientRect() from the mutation loop.
-
-A later same-profile audit pass measured:
+A later v1.2 masthead pass measured:
 
 | Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
 |---|---:|---:|---:|---:|
 | YouTube baseline after reload | 0.259% | 8.28% | 1037.7 MB | 551.3 MB |
 | Ambient + static/hover logo treatment | 2.285% | 73.12% | 1347.3 MB | 555.3 MB |
 
-The large working-set difference is Chrome cache/renderer noise; private bytes differed by only about 4 MB in that particular pair. CPU still fluctuates substantially with YouTube playback, so treat this as an observed VM sample rather than a portable extension-only benchmark.
+These are VM/profile-level observations, not portable extension-only benchmarks. YouTube playback, decoding, caching, source resolution, browser version, and the virtual graphics stack produce large variance.
 
-A 30-second follow-up with the final static/hover logo treatment showed no monotonic private-memory growth:
+### Earlier memory stability check
 
-520.9 → 512.2 → 507.5 → 512.7 MB
-
-Working set also trended down during that run:
-
-1299.1 → 1283.6 → 1240.4 → 1212.4 MB
-
-That is not a universal number. A physical Intel/AMD/NVIDIA GPU, another codec, display scaling, source resolution, or browser version can move it substantially.
-
-The RAM figures are for the **entire Chrome profile**, not the extension alone. Renderer processes and shared browser caches can appear/disappear between samples, so the table must not be read as a precise extension-memory delta.
-
-### 30-second memory stability check
-
-With the final optimized ambient path running, the profile was sampled every 10 seconds:
+One 30-second v1.2 follow-up showed no monotonic private-memory growth:
 
 | Time | Chrome processes | Working set | Private bytes |
 |---:|---:|---:|---:|
@@ -78,28 +92,27 @@ With the final optimized ambient path running, the profile was sampled every 10 
 | 20 s | 10 | 1324.4 MB | 517.0 MB |
 | 30 s | 10 | 1322.5 MB | 518.9 MB |
 
-After one Chrome process exited, both working set and private bytes stayed essentially flat. There was **no monotonic short-run RAM growth**, which is consistent with reusing one canvas/context and one throttled timer instead of allocating a new frame object or decoder continuously.
-
-This is evidence against an obvious leak, not proof that no leak can ever appear over hours or days.
+This is evidence against an obvious short-run leak, not proof that no leak could appear over hours or days.
 
 ## GPU observation
 
-`nvidia-smi` is unavailable on this VM. Windows reports VMware SVGA 3D plus the Microsoft Remote Display Adapter, and the per-process dedicated/shared GPU counters returned zero in this virtual graphics stack. A trustworthy extension-only VRAM delta therefore cannot be reported from 181.
+nvidia-smi is unavailable on this VM. Windows reports VMware SVGA 3D plus the Microsoft Remote Display Adapter, so a trustworthy extension-only VRAM delta cannot be reported from 181.
 
 The implementation limits GPU pressure structurally:
 
-- one ambient canvas;
-- no second video decoder;
+- one existing YouTube decoder;
+- one small ambient canvas;
+- one tiny 384x24 topbar canvas;
+- no second video stream;
 - no full-resolution video-copy surface;
-- no live Gaussian blur on every frame;
-- default effective canvas only 484x272 at 4 FPS;
+- no per-frame full-resolution Gaussian blur;
 - rendering stops when hidden, paused, ended, disabled, or off a valid watch page.
 
 ## Practical presets
 
-- **Medium / 4 FPS**: default balance used for the runtime checks.
-- **Low / 2â€“4 FPS**: best for laptops, battery use, VMs, remote desktops, or already-heavy YouTube pages.
+- **Medium / 4 FPS**: default balance.
+- **Low / 2-4 FPS**: best for laptops, battery use, VMs, or remote desktops.
 - **6 FPS**: smoother ambient motion with moderate extra work.
-- **High / 10 FPS**: intentionally expensive; use only when the machine has headroom.
+- **High / 10 FPS**: intentionally more expensive.
 
-Run `npm run perf` to print the current pixel-copy model after changing defaults.
+Run npm run perf after changing the rendering defaults.

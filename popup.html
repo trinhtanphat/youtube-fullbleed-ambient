@@ -49,6 +49,22 @@
 
       <label class="check-row">
         <span>
+          <strong>Live-video topbar</strong>
+          <small>Paints a low-rate blurred strip from the playing video behind YouTube's top bar.</small>
+        </span>
+        <input id="topbarVideo" type="checkbox">
+      </label>
+
+      <label class="check-row">
+        <span>
+          <strong>Ad Shield</strong>
+          <small>Blocks common ad hosts and auto-skips or accelerates in-player ads when possible.</small>
+        </span>
+        <input id="adBlock" type="checkbox">
+      </label>
+
+      <label class="check-row">
+        <span>
           <strong>Calm reading mode</strong>
           <small>Softens ambient while reading comments.</small>
         </span>
@@ -76,10 +92,10 @@
         <div>
           <label for="fps">Render FPS</label>
           <select id="fps">
-            <option value="2">2 — Eco</option>
-            <option value="4">4 — Balanced</option>
-            <option value="6">6 — Smooth</option>
-            <option value="10">10 — Max</option>
+            <option value="2">2 - Eco</option>
+            <option value="4">4 - Balanced</option>
+            <option value="6">6 - Smooth</option>
+            <option value="10">10 - Max</option>
           </select>
         </div>
         <div>
@@ -103,7 +119,7 @@
       <span id="liveDot" class="dot"></span>
       <p id="status" role="status" aria-live="polite"></p>
     </div>
-    <p class="hint">Alt+Shift+D toggles dock · Alt+Shift+A toggles ambient · Esc exits Focus fill.</p>
+    <p class="hint">Alt+Shift+D toggles dock - Alt+Shift+A toggles ambient - Esc exits Focus fill.</p>
   </main>
   <script src="helpers.js"></script>
   <script src="popup.js"></script>

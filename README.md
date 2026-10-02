@@ -1,8 +1,8 @@
 # YouTube Fullbleed Ambient
 
-A lightweight Chrome/Edge Manifest V3 extension that turns the currently playing YouTube video into a full-page ambient scene **without starting a second video decoder**.
+A lightweight Chrome/Edge Manifest V3 extension that turns the currently playing YouTube video into an ambient full-page experience while reusing YouTube's existing video element. It does not create a second video decoder.
 
-Version 1.2 adds a polished YouTube masthead/logo treatment plus lifecycle fixes on top of the scroll-first experience: the native player stays interactive in a dock while you read comments, the ambient background calms down around text, and the top bar keeps a visible YouTube brand without adding a second video layer.
+Version 1.3 adds a live-video masthead effect and Ad Shield on top of the existing Ambient Page, Scroll Dock, Calm Reading, Glass Comments, Focus Fill, and native YouTube logo treatment.
 
 ## Experience
 
@@ -10,55 +10,60 @@ Version 1.2 adds a polished YouTube masthead/logo treatment plus lifecycle fixes
 
 The current video is sampled into one low-resolution canvas and stretched behind the YouTube page. YouTube controls, recommendations, comments, navigation, and video switching stay native.
 
+### Live-video topbar
+
+The top bar now receives its own tiny **384x24** canvas sampled from the currently playing video at roughly **2 FPS**. It is enlarged, blurred, darkened, and saturated behind YouTube's real masthead controls.
+
+The topbar canvas has pointer-events disabled, while the real YouTube masthead, search, profile controls, and logo stay above it and remain clickable. This is a visual sample of the existing video, not another stream or decoder.
+
 ### YouTube masthead + logo
 
-The native YouTube masthead stays clickable and gains a lightweight translucent treatment, red hairline, and subtle static/hover logo glow. The extension prefers YouTube's real logo; if a YouTube experiment temporarily hides or delays it, a small accessible fallback YouTube home mark appears and is automatically removed when the native logo returns. The effect uses gradients/opacity/transform only — no full-width animated blur or backdrop-filter.
+The native YouTube logo remains the primary home button and receives a subtle red accent. If a YouTube experiment temporarily removes that logo node, the extension provides a small accessible fallback home mark and removes it automatically when the native logo returns.
+
+### Ad Shield
+
+Ad Shield is enabled by default and combines three best-effort layers:
+
+1. Manifest V3 declarativeNetRequest rules block a small set of common advertising hosts and YouTube ad endpoints.
+2. Cosmetic rules hide known YouTube ad slots and overlay containers.
+3. In-player handling clicks a visible Skip Ad control when available; otherwise it temporarily mutes and accelerates the detected ad, then restores the previous playback speed and mute state when the ad ends.
+
+Ad Shield deliberately does **not** broadly block googlevideo.com, because normal YouTube video delivery also uses that infrastructure.
+
+YouTube changes ad delivery frequently and may use server-side insertion or experiments that do not match these rules. Ad Shield should therefore be treated as best-effort rather than a guarantee that every ad will always be removed.
 
 ### Scroll Dock
 
-With **Keep video docked** enabled, the existing YouTube player moves into a floating corner dock after you scroll past it. You can:
+With **Keep video docked** enabled, the existing YouTube player moves into a floating corner dock after you scroll past it. You can keep watching while reading comments, continue using YouTube's normal controls, choose Small / Medium / Large dock sizes, and use Alt+Shift+D to dock or undock immediately.
 
-- keep watching while reading comments;
-- pause/seek/change volume using the normal YouTube controls;
-- switch to another video normally;
-- choose Small / Medium / Large dock sizes;
-- use `Alt+Shift+D` to dock or undock immediately.
+No duplicate video element is created.
 
-No duplicate `<video>` element is created.
+### Calm reading mode and Glass comments
 
-### Calm reading mode
-
-Once you scroll into the reading area, ambient intensity automatically softens. This reduces the â€œbusy wallpaperâ€ feeling that makes many ambient extensions fun for a few minutes but tiring long-term.
-
-### Glass comments
-
-Comments sit on one translucent panel instead of many blurred cards. The background is still visible, but text remains readable and the GPU does not need to blur every comment row.
+When you scroll into the reading area, ambient intensity softens automatically. Comments sit on one translucent panel instead of many independently blurred cards, keeping text readable while avoiding expensive blur work on each comment row.
 
 ### Focus fill
 
-Focus fill expands the real YouTube player to the browser viewport. Press **Esc** to return to normal browsing.
+Focus Fill expands the real YouTube player to the browser viewport. Press Esc to return to normal browsing.
 
 ## Performance design
 
-- Reuses the existing YouTube `<video>`; no duplicate network stream or decoder.
-- Default effective canvas is approximately **484Ã—272** at Softness 42 (Medium quality).
-- Softness is implemented by dynamic downsampling instead of a costly live Gaussian blur.
-- Default refresh is **4 FPS**.
-- Available FPS presets: 2 / 4 / 6 / 10.
-- Rendering stops when the tab is hidden, video is paused/ended, the extension is disabled, or the page leaves a valid YouTube watch URL.
-- One MutationObserver is reused for YouTube SPA navigation.
-- Scroll behavior is handled with a passive listener plus one queued animation-frame update.
-- Settings writes from range sliders are debounced.
+- Reuses the existing YouTube video element; no duplicate network stream or decoder.
+- Default ambient canvas is approximately **484x272** at Softness 42 and 4 FPS.
+- Live-video topbar uses only **384x24 at about 2 FPS**, roughly **0.018 MP/s** of extra canvas copying.
+- Softness is implemented mainly through downsampling instead of running a full-resolution Gaussian blur on every video frame.
+- Rendering stops when the tab is hidden, the video is paused/ended, the extension is disabled, or the page leaves a valid YouTube watch URL.
+- Topbar sampling piggybacks on the existing ambient render loop rather than adding another continuous animation loop.
+- Ad acceleration uses a temporary watchdog only while YouTube reports an in-player ad and is stopped/restored immediately when that state ends.
+- YouTube SPA navigation reuses observers and tears them down when the feature is inactive.
 
-For a 4K source, the default Medium / 4 FPS / Softness 42 preset draws about **0.527 megapixels per second** into the ambient canvas.
-
-See [PERFORMANCE.md](PERFORMANCE.md) for the measured Windows 181 CPU/RAM/GPU observations and limitations.
+Run npm run perf for the current pixel-copy model. See PERFORMANCE.md for measured VM observations and limitations.
 
 ## Install unpacked
 
 ### Chrome
 
-1. Open `chrome://extensions`.
+1. Open chrome://extensions.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select this repository directory.
@@ -66,10 +71,13 @@ See [PERFORMANCE.md](PERFORMANCE.md) for the measured Windows 181 CPU/RAM/GPU ob
 
 ### Edge
 
-1. Open `edge://extensions`.
+1. Open edge://extensions.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select this repository directory.
+5. Open or refresh a YouTube watch page.
+
+After upgrading from v1.2, use **Reload** on the extension card because v1.3 adds a Manifest V3 background service worker and new scoped host permissions for Ad Shield.
 
 ## Controls
 
@@ -77,62 +85,76 @@ The popup contains:
 
 - master enable toggle;
 - Ambient or Focus-fill startup mode;
-- Scroll Dock on/off;
-- dock size;
+- Scroll Dock on/off and dock size;
+- Live-video topbar on/off;
+- Ad Shield on/off;
 - Calm reading mode;
 - Glass comments;
 - brightness and softness;
 - 2 / 4 / 6 / 10 FPS;
-- Low / Medium / High canvas budget;
+- Low / Medium / High ambient canvas budget;
 - Dock / undock button;
-- Focus fill button;
+- Focus Fill button;
 - Reset defaults.
 
-Keyboard shortcuts implemented inside YouTube pages:
+Keyboard shortcuts inside YouTube pages:
 
-- `Alt+Shift+D` â€” dock / undock.
-- `Alt+Shift+A` â€” enable / disable ambient.
-- `Esc` â€” leave Focus fill.
+- Alt+Shift+D - dock / undock;
+- Alt+Shift+A - enable / disable ambient;
+- Esc - leave Focus Fill.
+
+## Permissions
+
+The extension uses:
+
+- storage for synchronized settings;
+- declarativeNetRequest for the small dynamic Ad Shield rule set;
+- host access to YouTube and the explicitly listed common ad hosts in manifest.json.
+
+It does not request tabs, activeTab, cookies, webRequest, browsing history, or remote-code permissions.
 
 ## Tests
 
-```powershell
-npm test
-npm run check
-npm run perf
-```
+Run:
+
+- npm test
+- npm run check
+- npm run perf
 
 For a local browser already exposing a CDP debugging port:
 
-```powershell
-node scripts/cdp-inject.js 9244
-node scripts/cdp-ux-smoke.js 9244
-node scripts/cdp-dom-audit.js 9244
-```
+- node scripts/cdp-inject.js 9244
+- node scripts/cdp-ux-smoke.js 9244
+- node scripts/cdp-dom-audit.js 9244
 
-The UX smoke verifies: ambient activation, the default 484x272 effective canvas, native-logo accent and click target, accessible logo fallback/recovery, Focus-fill state stability across settings changes, scroll-triggered docking, reading mode, fixed player positioning, leave/return lifecycle cleanup, and clean undocking when returning to the top.
+The automated suite covers settings normalization, pixel budgets, scroll behavior, manifest permissions, packaged files, local-code-only checks, Ad Shield rule construction, service-worker enable/disable behavior, and icon validity.
 
-No GitHub Actions are required.
+The browser smoke/audit checks the live masthead canvas, native-logo click target, fallback-logo recovery, Scroll Dock, Focus Fill lifecycle, cosmetic ad hiding, simulated Skip Ad handling, ad acceleration, and playback-rate restoration.
+
+No GitHub Actions are required for the local validation workflow.
 
 ## Privacy
 
-No analytics, tracking, remote scripts, accounts, or external services are used by the extension. Settings are stored with Chrome/Edge sync storage. The extension is scoped to `https://www.youtube.com/*`.
+No analytics, tracking, accounts, remote scripts, or external extension services are used. Settings are stored with Chrome/Edge sync storage. Ad Shield only installs local browser rules contained in this repository.
 
 ## Known limitations
 
-- YouTube frequently changes DOM/CSS; selectors may occasionally need adjustment.
-- Browser/DRM policies can prevent canvas frame capture for some protected media. Static YouTube thumbnail fallback is used when drawing fails.
-- YouTube experiments or its native miniplayer may occasionally interact with Scroll Dock layout.
-- Focus fill is an in-page viewport override, not the browser Fullscreen API.
-- GPU/CPU results vary substantially by browser, driver, VM, display scaling, and source-video codec.
+- YouTube frequently changes DOM, CSS, and ad delivery; selectors and ad rules may need future updates.
+- Server-side-inserted ads can be indistinguishable from ordinary media delivery, so blocking them aggressively can also break videos. This extension intentionally avoids broad media-host blocking.
+- Browser/DRM policies can prevent canvas frame capture for some protected media. The ambient layer can fall back to a static YouTube thumbnail.
+- YouTube experiments or its native miniplayer can occasionally interact with Scroll Dock layout.
+- Focus Fill is an in-page viewport override, not the browser Fullscreen API.
+- CPU/GPU results vary by browser, driver, VM, display scaling, and source codec.
 
 ## Files worth reading
 
-- `content.js` â€” lifecycle, rendering, SPA handling, scroll dock.
-- `content.css` â€” ambient, reading, comments, focus and dock presentation.
-- `helpers.js` â€” pure settings, throttling and geometry helpers.
-- `PERFORMANCE.md` â€” benchmark notes.
-- `SECURITY.md` â€” security posture.
+- content.js - lifecycle, ambient/topbar rendering, SPA handling, Scroll Dock, and in-player Ad Shield logic.
+- content.css - ambient, live masthead, cosmetic ad hiding, reading, comments, focus, and dock presentation.
+- ad-rules.js - scoped declarative network rules.
+- background.js - Manifest V3 Ad Shield service-worker lifecycle.
+- helpers.js - settings, throttling, and geometry helpers.
+- PERFORMANCE.md - benchmark notes and limits.
+- SECURITY.md - permission and security posture.
 
 ## License
 
