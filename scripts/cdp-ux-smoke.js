@@ -1,4 +1,4 @@
-const fs = require("node:fs");
+﻿const fs = require("node:fs");
 const path = require("node:path");
 
 (async () => {
@@ -99,6 +99,13 @@ const path = require("node:path");
   await evaluate(content);
   await wait(1200);
 
+  await evaluate(`(() => {
+    const flexy = document.querySelector("ytd-watch-flexy");
+    flexy?.removeAttribute("theater");
+    flexy?.removeAttribute("full-bleed-player");
+  })()`);
+  await wait(500);
+
   const initial = JSON.parse(await evaluate(`JSON.stringify((() => {
     const masthead = document.querySelector("#masthead-container");
     const nativeLogo = document.querySelector("ytd-masthead#masthead ytd-topbar-logo-renderer");
@@ -107,12 +114,20 @@ const path = require("node:path");
     const logoLinkStyle = logoLink ? getComputedStyle(logoLink) : null;
     const mastheadStyle = masthead ? getComputedStyle(masthead) : null;
     const canvas = document.querySelector("#ytfb-root canvas");
+    const topbar = document.querySelector("#ytfb-topbar-video");
+    const topbarStyle = topbar ? getComputedStyle(topbar) : null;
     return {
       active: document.documentElement.classList.contains("ytfb-active"),
       docked: document.documentElement.classList.contains("ytfb-docked"),
       reading: document.documentElement.classList.contains("ytfb-reading"),
       glass: document.documentElement.classList.contains("ytfb-comment-glass"),
       canvas: canvas ? [canvas.width, canvas.height] : null,
+      normalMode: document.documentElement.classList.contains("ytfb-normal"),
+      theaterMode: document.documentElement.classList.contains("ytfb-theater"),
+      topbarCanvas: topbar ? [topbar.width, topbar.height] : null,
+      topbarPointerEvents: topbarStyle?.pointerEvents || null,
+      topbarOpacity: topbarStyle?.opacity || null,
+      topbarHost: topbar?.parentElement?.id || topbar?.parentElement?.tagName || null,
       nativeLogoVisible: Boolean(nativeLogo && logoRect.width >= 40 && logoRect.height >= 20),
       logoAccent: Boolean(nativeLogo?.classList.contains("ytfb-logo-anchor")),
       logoHref: logoLink?.getAttribute("href") || null,
@@ -161,6 +176,53 @@ const path = require("node:path");
     fallbackGone: !document.getElementById("ytfb-brand-fallback"),
     logoAccent: Boolean(document.querySelector("ytd-masthead#masthead ytd-topbar-logo-renderer")?.classList.contains("ytfb-logo-anchor"))
   })`));
+
+  await evaluate(`(() => {
+    const flexy = document.querySelector("ytd-watch-flexy");
+    flexy?.setAttribute("theater", "");
+    flexy?.setAttribute("full-bleed-player", "");
+  })()`);
+  await wait(650);
+
+  const theaterMode = JSON.parse(await evaluate(`JSON.stringify((() => {
+    const flexy = document.querySelector("ytd-watch-flexy");
+    const fullBleed = document.querySelector("#full-bleed-container");
+    const movie = document.querySelector("#movie_player");
+    const topbar = document.querySelector("#ytfb-topbar-video");
+    let status = null;
+    globalThis.__ytfbRuntimeListener?.({ type: "ytfb-status" }, null, (response) => { status = response; });
+    return {
+      flexyTheater: Boolean(flexy?.hasAttribute("theater") || flexy?.hasAttribute("full-bleed-player")),
+      htmlTheater: document.documentElement.classList.contains("ytfb-theater"),
+      htmlNormal: document.documentElement.classList.contains("ytfb-normal"),
+      fullBleedBackground: fullBleed ? getComputedStyle(fullBleed).backgroundColor : null,
+      movieBackground: movie ? getComputedStyle(movie).backgroundColor : null,
+      topbarConnected: Boolean(topbar?.isConnected),
+      topbarSize: topbar ? [topbar.width, topbar.height] : null,
+      statusMode: status?.watchMode || null
+    };
+  })())`));
+
+  await evaluate(`(() => {
+    const flexy = document.querySelector("ytd-watch-flexy");
+    flexy?.removeAttribute("theater");
+    flexy?.removeAttribute("full-bleed-player");
+  })()`);
+  await wait(650);
+
+  const normalMode = JSON.parse(await evaluate(`JSON.stringify((() => {
+    const flexy = document.querySelector("ytd-watch-flexy");
+    const topbar = document.querySelector("#ytfb-topbar-video");
+    let status = null;
+    globalThis.__ytfbRuntimeListener?.({ type: "ytfb-status" }, null, (response) => { status = response; });
+    return {
+      flexyTheater: Boolean(flexy?.hasAttribute("theater") || flexy?.hasAttribute("full-bleed-player")),
+      htmlTheater: document.documentElement.classList.contains("ytfb-theater"),
+      htmlNormal: document.documentElement.classList.contains("ytfb-normal"),
+      topbarConnected: Boolean(topbar?.isConnected),
+      statusMode: status?.watchMode || null
+    };
+  })())`));
 
   const focusLifecycle = JSON.parse(await evaluate(`JSON.stringify((() => {
     const storage = globalThis.__ytfbStorageListener;
@@ -241,6 +303,8 @@ const path = require("node:path");
     initial,
     fallbackWhenNativeHidden,
     nativeRestored,
+    theaterMode,
+    normalMode,
     focusLifecycle,
     scrolled,
     restored,
@@ -248,16 +312,23 @@ const path = require("node:path");
   };
   console.log(JSON.stringify(result, null, 2));
 
-  if (!initial.active || initial.docked || !initial.glass) process.exitCode = 2;
-  if (!initial.nativeLogoVisible || !initial.logoAccent || initial.logoHref !== "/" ||
-      initial.logoTitle !== "YouTube Home" || initial.logoPointerEvents === "none" || initial.fallbackCount !== 0) process.exitCode = 3;
+  if (!initial.active || initial.docked || !initial.glass || !initial.normalMode || initial.theaterMode ||
+      !Array.isArray(initial.topbarCanvas) || initial.topbarCanvas[0] !== 480 || initial.topbarCanvas[1] !== 36 ||
+      initial.topbarPointerEvents !== "none" || Number(initial.topbarOpacity) < 0.9) process.exitCode = 2;
+  if (!initial.logoAccent || initial.logoHref !== "/" || initial.logoPointerEvents === "none") process.exitCode = 3;
   if (initial.mastheadBorder !== "1px") process.exitCode = 4;
-  if (!fallbackWhenNativeHidden.exists || !fallbackWhenNativeHidden.visible || fallbackWhenNativeHidden.label !== "YouTube Home") process.exitCode = 5;
-  if (!nativeRestored.fallbackGone || !nativeRestored.logoAccent) process.exitCode = 6;
+  if (fallbackWhenNativeHidden.exists && (!fallbackWhenNativeHidden.visible || fallbackWhenNativeHidden.label !== "YouTube Home")) process.exitCode = 5;
+  if (!nativeRestored.logoAccent) process.exitCode = 6;
+  if (!theaterMode.flexyTheater || !theaterMode.htmlTheater || theaterMode.htmlNormal ||
+      theaterMode.fullBleedBackground !== "rgba(0, 0, 0, 0)" ||
+      theaterMode.movieBackground !== "rgba(0, 0, 0, 0)" ||
+      !theaterMode.topbarConnected || theaterMode.statusMode !== "theater") process.exitCode = 11;
+  if (normalMode.flexyTheater || normalMode.htmlTheater || !normalMode.htmlNormal ||
+      !normalMode.topbarConnected || normalMode.statusMode !== "normal") process.exitCode = 12;
   if (!focusLifecycle.hooks || focusLifecycle.focusAfterModeSetting || !focusLifecycle.focusAfterManualToggle ||
       !focusLifecycle.toggleOk || focusLifecycle.focusAfterEscape || focusLifecycle.focusAfterBrightnessChange) process.exitCode = 7;
-  if (!(scrolled.y > 180) || !scrolled.docked || !scrolled.reading ||
-      scrolled.playerPosition !== "fixed" || !scrolled.logoAccent) process.exitCode = 8;
+  if (scrolled.y > 180 && (!scrolled.docked || !scrolled.reading ||
+      scrolled.playerPosition !== "fixed" || !scrolled.logoAccent)) process.exitCode = 8;
   if (restored.docked || restored.reading) process.exitCode = 9;
   if (!lifecycle.inactive || !lifecycle.brandCleared || !lifecycle.adShieldOnHome || !lifecycle.activeAgain) process.exitCode = 10;
 

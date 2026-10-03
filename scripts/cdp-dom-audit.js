@@ -193,7 +193,7 @@
 
   const topbar = value?.selectors?.find((item) => item.selector === "#ytfb-topbar-video");
   if (!value?.active || !value?.topbarVideoEnabled || !value?.adShieldEnabled) process.exitCode = 2;
-  if (!topbar?.found || topbar.intrinsicWidth !== 384 || topbar.intrinsicHeight !== 24 ||
+  if (!topbar?.found || topbar.intrinsicWidth !== 480 || topbar.intrinsicHeight !== 36 ||
       topbar.pointerEvents !== "none") process.exitCode = 3;
   if (!value?.adSkipSimulated || value?.playerStillAdShowing) process.exitCode = 4;
   if (!value?.adAccelerationActive?.muted || value.adAccelerationActive.rate < 8 ||

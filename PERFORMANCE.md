@@ -14,56 +14,45 @@ At the default Softness value (42), a 4K source is reduced to:
 | Medium | 484x272 | 0.263 MP/s | 0.527 MP/s | 0.790 MP/s | 1.316 MP/s |
 | High | 728x408 | 0.594 MP/s | 1.188 MP/s | 1.782 MP/s | 2.970 MP/s |
 
-The default is **Medium / 4 FPS / Softness 42**, or about **0.527 megapixels per second** of ambient-canvas copies.
+The default is **Medium / 4 FPS / Softness 42**, about **0.527 MP/s** of ambient-canvas copies.
 
-## v1.3 live-video topbar
+## v1.4 live-video topbar
 
-The live masthead effect adds a second **canvas surface**, but not a second media element or decoder. Its internal surface is only **384x24** and is refreshed at about **2 FPS** by piggybacking on the existing ambient render loop.
+The masthead effect adds a second canvas surface, but not a second media element or decoder. Its internal surface is **480x36** and is sampled at about **2 FPS** by piggybacking on the ambient render loop:
 
-That is approximately:
+**480 x 36 x 2 = 0.035 MP/s**
 
-**384 x 24 x 2 = 0.018 MP/s**
+That modeled copy workload is about 6.6% of the default ambient canvas copy workload. CSS enlarges and blurs the small surface behind YouTube's real masthead. The canvas has pointer events disabled so the native controls remain interactive.
 
-So the modeled topbar copy workload is only about 3.5% of the default ambient canvas copy workload. CSS then enlarges and blurs this tiny surface behind the real YouTube masthead.
+Normal mode and Theater mode use the same surfaces. The extension observes YouTube's watch-layout attributes and changes transparency/anchoring rather than creating another player.
 
-The topbar canvas uses pointer-events none, while the real masthead controls remain in a higher stacking layer.
+## v1.4 Ad Shield runtime behavior
 
-## v1.3 Ad Shield runtime behavior
+Network blocking is handled by scoped Manifest V3 declarative rules and adds no per-frame rendering work. A packaged MAIN-world guard removes a bounded set of known ad-related fields from YouTube player responses. Cosmetic hiding is ordinary CSS.
 
-Network blocking is handled by Manifest V3 declarative rules and adds no per-frame rendering work.
+In-player handling uses a dedicated player observer. A visible Skip Ad control is clicked when available. For a positively detected unskippable ad, a short-lived watchdog can maintain mute + accelerated playback and then restore the prior playback rate/mute state after the ad condition clears.
 
-Cosmetic hiding is ordinary CSS. In-player handling uses a dedicated observer on the YouTube player. If a skippable ad control appears, it is clicked. If YouTube reports an unskippable ad, a short-lived watchdog maintains mute + accelerated playback while that ad state is present, then stops and restores the previous playback rate when the state clears.
+The extension deliberately does not broadly block shared YouTube media delivery hosts such as googlevideo.com.
 
-The watchdog does not run during normal video playback.
+## Browser smoke coverage
 
-The browser runtime audit verifies:
+The runtime smoke/audit checks:
 
-- live topbar canvas exists at 384x24;
+- ambient activation in normal mode;
+- native Theater mode transition and return to normal;
+- transparent full-bleed/theater backgrounds while ambient is active;
+- live topbar canvas remains connected at 480x36;
 - topbar pointer events are disabled;
-- native masthead controls remain clickable;
-- simulated Skip Ad handling clears the ad state;
-- simulated unskippable-ad handling reaches 16x playback while active;
-- the ad watchdog reports inactive after the ad state is removed;
-- playback rate returns to its previous value.
+- native masthead controls remain interactive;
+- cosmetic ad containers are hidden;
+- synthetic skip/accelerate paths restore playback state;
+- Focus Fill and SPA lifecycle cleanup.
 
-This test is synthetic because ad inventory is not deterministic. It tests the extension's handling path rather than claiming that a specific live ad campaign will always be present.
+Synthetic ad tests verify the handling code path; they do not claim a specific live advertising campaign will always be present or always use the same delivery method.
 
-## Windows 181 runtime measurement
+## Windows 181 observations
 
-Earlier v1.2 measurements were taken on the Windows 181 development VM:
-
-- Windows build 10.0.26200;
-- 32 logical CPUs;
-- Chrome 153.0.8010.53;
-- VMware SVGA 3D + Microsoft Remote Display Adapter;
-- one isolated Chrome profile playing the same YouTube watch page;
-- default Medium / 4 FPS / Softness 42 settings.
-
-Stable branded Chrome in this environment did not reliably activate an unpacked extension from the command-line flags used by the harness. Runtime content checks therefore inject the exact packaged helpers.js, content.js, and content.css through Chrome DevTools Protocol with a tiny storage/runtime shim. The final packaging step should still be checked with **Load unpacked** or **Reload** in Chrome/Edge.
-
-### Earlier CPU/RAM samples
-
-Short samples varied with YouTube loading, ads, caching, and renderer lifecycle:
+Earlier measurements were collected on the Windows 181 VM with Chrome 153, 32 logical CPUs, VMware SVGA 3D, and an isolated YouTube profile. Those numbers are useful as rough observations, not extension-only benchmarks.
 
 | Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
 |---|---:|---:|---:|---:|
@@ -72,18 +61,18 @@ Short samples varied with YouTube loading, ads, caching, and renderer lifecycle:
 | Baseline, post-reload/warm | 0.195% | 6.25% | 1156.7 MB | 570.3 MB |
 | Ambient, warmed 15 s | 1.992% | 63.75% | 1248.5 MB | 522.7 MB |
 
-A later v1.2 masthead pass measured:
+A later masthead pass measured:
 
 | Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
 |---|---:|---:|---:|---:|
 | YouTube baseline after reload | 0.259% | 8.28% | 1037.7 MB | 551.3 MB |
 | Ambient + static/hover logo treatment | 2.285% | 73.12% | 1347.3 MB | 555.3 MB |
 
-These are VM/profile-level observations, not portable extension-only benchmarks. YouTube playback, decoding, caching, source resolution, browser version, and the virtual graphics stack produce large variance.
+These runs predate the final v1.4 topbar dimensions and are retained only as historical VM observations. YouTube playback, decoding, caching, source resolution, browser version, and the virtual graphics stack produce large variance.
 
 ### Earlier memory stability check
 
-One 30-second v1.2 follow-up showed no monotonic private-memory growth:
+One 30-second follow-up showed no monotonic private-memory growth:
 
 | Time | Chrome processes | Working set | Private bytes |
 |---:|---:|---:|---:|
@@ -96,15 +85,13 @@ This is evidence against an obvious short-run leak, not proof that no leak could
 
 ## GPU observation
 
-nvidia-smi is unavailable on this VM. Windows reports VMware SVGA 3D plus the Microsoft Remote Display Adapter, so a trustworthy extension-only VRAM delta cannot be reported from 181.
-
-The implementation limits GPU pressure structurally:
+A trustworthy extension-only VRAM delta is not available from the 181 VMware graphics stack. The implementation limits pressure structurally:
 
 - one existing YouTube decoder;
-- one small ambient canvas;
-- one tiny 384x24 topbar canvas;
+- one bounded ambient canvas;
+- one small 480x36 topbar canvas;
 - no second video stream;
-- no full-resolution video-copy surface;
+- no full-resolution copy surface;
 - no per-frame full-resolution Gaussian blur;
 - rendering stops when hidden, paused, ended, disabled, or off a valid watch page.
 
@@ -115,4 +102,4 @@ The implementation limits GPU pressure structurally:
 - **6 FPS**: smoother ambient motion with moderate extra work.
 - **High / 10 FPS**: intentionally more expensive.
 
-Run npm run perf after changing the rendering defaults.
+Run `npm run perf` after changing rendering defaults.

@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
-test("manifest stays MV3 with scoped Ad Shield permissions", () => {
+test("manifest stays MV3 without a new scripting permission escalation", () => {
   assert.equal(manifest.manifest_version, 3);
   assert.deepEqual(manifest.permissions, ["storage", "declarativeNetRequest"]);
   assert.deepEqual(manifest.host_permissions, [
@@ -20,7 +20,31 @@ test("manifest stays MV3 with scoped Ad Shield permissions", () => {
   ]);
   assert.ok(!manifest.permissions.includes("tabs"));
   assert.ok(!manifest.permissions.includes("activeTab"));
+  assert.ok(!manifest.permissions.includes("webRequest"));
+  assert.ok(!manifest.permissions.includes("scripting"));
   assert.equal(manifest.background?.service_worker, "background.js");
+});
+
+test("MAIN-world page guard is statically declared at document_start", () => {
+  const guard = manifest.content_scripts.find((entry) =>
+    entry.world === "MAIN" &&
+    Array.isArray(entry.js) &&
+    entry.js.includes("page-guard.js")
+  );
+  assert.ok(guard);
+  assert.equal(guard.run_at, "document_start");
+  assert.deepEqual(guard.matches, ["https://www.youtube.com/*"]);
+  assert.deepEqual(guard.js, ["ad-sanitize.js", "page-guard.js"]);
+});
+
+test("isolated ambient content script remains document_idle", () => {
+  const ambient = manifest.content_scripts.find((entry) =>
+    Array.isArray(entry.js) && entry.js.includes("content.js")
+  );
+  assert.ok(ambient);
+  assert.equal(ambient.run_at, "document_idle");
+  assert.deepEqual(ambient.js, ["helpers.js", "content.js"]);
+  assert.deepEqual(ambient.css, ["content.css"]);
 });
 
 test("manifest and package versions match", () => {
@@ -48,6 +72,8 @@ test("runtime files contain no remote code or dynamic code execution", () => {
   const runtimeFiles = [
     "helpers.js",
     "ad-rules.js",
+    "ad-sanitize.js",
+    "page-guard.js",
     "background.js",
     "content.js",
     "popup.js",
