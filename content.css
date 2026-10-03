@@ -74,39 +74,43 @@ html.ytfb-active ytd-app {
  * Masthead polish: keep YouTube's real logo and controls, then add a cheap
  * translucent treatment. No backdrop-filter or full-width animated blur.
  */
-html.ytfb-active #masthead-container {
+html.ytfb-active #masthead-container,
+html.ytfb-active ytd-masthead#masthead {
   isolation: isolate;
   overflow: hidden;
+  border-bottom: 1px solid color-mix(in srgb, #ff0033 26%, transparent);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.04),
+    0 10px 28px rgba(0,0,0,.16);
+}
+
+html.ytfb-active #masthead-container {
   background: color-mix(
     in srgb,
-    var(--yt-spec-base-background, #0f0f0f) 86%,
+    var(--yt-spec-base-background, #0f0f0f) 76%,
     transparent
   ) !important;
-  border-bottom: 1px solid color-mix(in srgb, #ff0033 24%, transparent);
-  box-shadow:
-    0 1px 0 rgba(255,255,255,.035),
-    0 10px 28px rgba(0,0,0,.16);
 }
 
 html.ytfb-active.ytfb-topbar-video-enabled #masthead-container {
   background: color-mix(
     in srgb,
-    var(--yt-spec-base-background, #0f0f0f) 44%,
+    var(--yt-spec-base-background, #0f0f0f) 14%,
     transparent
   ) !important;
 }
 
 #ytfb-topbar-video {
   position: absolute;
-  inset: -14px -4%;
+  inset: -10px -3%;
   z-index: 0;
-  width: 108%;
-  height: calc(100% + 28px);
+  width: 106%;
+  height: calc(100% + 20px);
   pointer-events: none;
   object-fit: cover;
-  opacity: .88;
-  transform: scale(1.06);
-  filter: blur(13px) brightness(.52) saturate(1.45) contrast(1.05);
+  opacity: 1;
+  transform: scale(1.04);
+  filter: blur(9px) brightness(.70) saturate(1.58) contrast(1.08);
 }
 
 html.ytfb-active ytd-masthead#masthead {
@@ -115,10 +119,21 @@ html.ytfb-active ytd-masthead#masthead {
   background:
     linear-gradient(
       100deg,
+      rgba(255,0,51,.07) 0%,
+      rgba(10,10,10,.04) 28%,
+      rgba(10,10,10,.04) 72%,
+      rgba(255,0,51,.03) 100%
+    ) !important;
+}
+
+html.ytfb-active.ytfb-topbar-video-enabled ytd-masthead#masthead {
+  background:
+    linear-gradient(
+      100deg,
       rgba(255,0,51,.08) 0%,
-      transparent 24%,
-      transparent 74%,
-      rgba(255,0,51,.035) 100%
+      rgba(4,4,4,.12) 24%,
+      rgba(4,4,4,.12) 76%,
+      rgba(255,0,51,.04) 100%
     ) !important;
 }
 
@@ -234,7 +249,24 @@ html.ytfb-active #content.ytd-app,
 html.ytfb-active #page-manager,
 html.ytfb-active #columns,
 html.ytfb-active #primary,
-html.ytfb-active #secondary {
+html.ytfb-active #secondary,
+html.ytfb-active #full-bleed-container,
+html.ytfb-active #player-full-bleed-container,
+html.ytfb-active #player-container-inner,
+html.ytfb-active #cinematics,
+html.ytfb-active #cinematics-container {
+  background: transparent !important;
+}
+
+html.ytfb-active.ytfb-theater ytd-watch-flexy[theater] #full-bleed-container,
+html.ytfb-active.ytfb-theater ytd-watch-flexy[full-bleed-player] #full-bleed-container,
+html.ytfb-active.ytfb-theater #player-full-bleed-container,
+html.ytfb-active.ytfb-theater #movie_player {
+  background-color: transparent !important;
+}
+
+html.ytfb-active.ytfb-normal #player-container-outer,
+html.ytfb-active.ytfb-normal #player-container-inner {
   background: transparent !important;
 }
 
@@ -248,6 +280,9 @@ html.ytfb-ad-shield #player-ads,
 html.ytfb-ad-shield .ytp-ad-overlay-container,
 html.ytfb-ad-shield .ytp-ad-text-overlay,
 html.ytfb-ad-shield ytd-ad-slot-renderer,
+html.ytfb-ad-shield ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
+html.ytfb-ad-shield ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
+html.ytfb-ad-shield ytd-reel-video-renderer:has(ytd-ad-slot-renderer),
 html.ytfb-ad-shield ytd-in-feed-ad-layout-renderer,
 html.ytfb-ad-shield ytd-display-ad-renderer,
 html.ytfb-ad-shield ytd-promoted-sparkles-web-renderer,

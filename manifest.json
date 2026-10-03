@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Fullbleed Ambient",
-  "version": "1.3.0",
-  "description": "Ambient YouTube background with live-video topbar, scroll dock, calm reading, focus fill, and Ad Shield.",
+  "version": "1.4.0",
+  "description": "YouTube ambient background with normal/theater support, live-video topbar, scroll dock, focus fill, and multi-layer Ad Shield.",
   "permissions": [
     "storage",
     "declarativeNetRequest"
@@ -32,6 +32,17 @@
     "128": "icons/icon128.png"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "ad-sanitize.js",
+        "page-guard.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "https://www.youtube.com/*"

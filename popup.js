@@ -125,10 +125,15 @@
     else if (response.docked) parts.push("Docked");
     else parts.push("Ambient");
 
+    if (response.watchMode === "theater") parts.push("Theater");
+    else if (response.watchMode === "normal") parts.push("Normal");
     if (response.reading) parts.push("calm");
     if (response.topbarVideo) parts.push("topbar live");
-    if (response.adBlock) parts.push(adRules?.enabled ? "Ad Shield" : "Ad Shield UI");
+    if (response.adBlock) {
+      parts.push(adRules?.enabled ? `Ad Shield ${adRules.ruleCount || 0}/7` : "Ad Shield UI only");
+    }
     if (response.canvas?.width) parts.push(response.canvas.width + "x" + response.canvas.height);
+    if (response.version) parts.push("v" + response.version);
 
     setStatus(parts.join(" - "), response.active ? "active" : "warn");
   }
