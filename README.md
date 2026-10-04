@@ -1,22 +1,28 @@
 # YouTube Fullbleed Ambient
 
-A lightweight Chrome/Edge Manifest V3 extension that reuses YouTube's existing player to create a full-page ambient background, a live-video masthead, scroll docking, focus fill, and a best-effort Ad Shield. It does not create a second video stream or decoder.
+A lightweight Chrome/Edge Manifest V3 extension that reuses YouTube's existing player to create a full-page ambient background, a seamless transparent YouTube header, scroll docking, focus fill, and a multi-layer best-effort Ad Shield. It does not fetch a second YouTube media URL or create a second decoder.
 
-Version 1.5.2 adds explicit support for YouTube normal and Theater layouts, a stronger live-video topbar, and a multi-layer Ad Shield with a packaged MAIN-world player-response guard.
+Version 1.6.0 removes the separately rendered masthead strip and lets the real YouTube header reveal the exact same full-page ambient surface. This removes the visible topbar/content seam and also removes one extra compositor/canvas surface. Ad Shield is strengthened to hide positively detected in-player ad media immediately, remove more current ad containers, try both DOM and player-API skip paths, seek short detected ad segments to their tail, and keep the existing 16x muted fallback.
 
-## v1.5.2 captureStream relay
+## V1.6.0 unified ambient + stronger Ad Shield
 
-Chrome can advance the YouTube media clock while a canvas `drawImage(video, ...)` sample remains frozen on some GPU/renderer paths. v1.5.2 therefore prefers `HTMLVideoElement.captureStream()`: one captured MediaStream from the existing YouTube player feeds a muted full-page relay video and a muted masthead relay video. They use `srcObject`, never a second URL, so there is no second YouTube download or decoder. The previous low-resolution canvas + poster pipeline remains as the compatibility fallback.
+The masthead, its background layer, border, and shadow are transparent only while ambient mode is active. YouTube's native logo, search field, buttons, menus, and account controls remain in their normal DOM positions above the full-page ambient layer. There is no dedicated topbar video, no 640x64 topbar canvas, and no separate masthead relay.
 
-The relay is cleaned up when YouTube replaces the source media element, navigation leaves a watch page, or the extension is disabled. A heartbeat checks relay progress and falls back/recreates it if the captured stream stalls.
+The full-page live path still prefers HTMLVideoElement.captureStream() from YouTube's existing player. One captured MediaStream feeds one muted local relay surface by srcObject; the bounded low-resolution canvas + poster path remains the compatibility fallback. A heartbeat detects a stalled relay and falls back/recreates it.
 
-## v1.5.1 refresh watchdog
+AdShield remains intentionally scoped: it does not broadly block googlevideo.com, because normal YouTube content uses the same delivery infrastructure. When YouTube itself reports an in-player ad, v1.6.0 hides the ad video immediately and shows the content poster while skip/seek/fast-forward logic clears the segment. This is still best-effort because YouTube can change delivery experiments or use server-side insertion.
 
-The live-frame pipeline now keeps a low-frequency timer watchdog running alongside `requestVideoFrameCallback`, plus a 500 ms heartbeat that restarts the renderer if YouTube strands both scheduled draw paths during a player transition. This fixes cases where the video clock keeps advancing while the ambient canvas or masthead stops refreshing. Drawing is still bounded by the configured FPS, so this does not create a second decoder or an unbounded animation loop.
+## V1.5.2 captureStream relay
 
-## v1.5 live-frame fix
+v1.5.2 introduced the captured-MediaStream live path to avoid frozen canvas sampling on some Chromium GPU/renderer paths. v1.6.0 keeps that live full-page relay but removes the old second masthead relay/canvas.
 
-The ambient page and masthead now sample decoded YouTube video frames directly with `requestVideoFrameCallback` when the browser supports it, with a timer fallback otherwise. A poster/thumbnail remains visible until the first real frame arrives, so paused/autoplay-blocked pages no longer look blank. Normal and Theater mode share the same frame pipeline.
+## V1.5.1 refresh watchdog
+
+The live-frame pipeline keeps a low-frequency timer watchdog alongside requestVideoFrameCallback, plus a 500 ms heartbeat that restarts rendering if YouTube strands scheduled draw paths during a player transition.
+
+## V1.5 live-frame fix
+
+The compatibility ambient path samples decoded YouTube video frames with requestVideoFrameCallback when available, with a timer fallback otherwise. A poster/thumbnail remains visible until the first real frame arrives.
 
 ## Experience
 
@@ -24,15 +30,15 @@ The ambient page and masthead now sample decoded YouTube video frames directly w
 
 The current video is sampled into a bounded low-resolution canvas and stretched behind the YouTube page. YouTube controls, recommendations, comments, navigation, and video switching remain native.
 
-### Live-video topbar
+### Unified ambient header
 
-On Chromium builds that support it, the masthead uses a muted local relay video fed by the same captured MediaStream as the full-page ambient layer. If captureStream is unavailable or stalls, a **640x64 @ ~4 FPS** canvas fallback keeps the masthead animated. CSS enlarges, blurs, darkens, and saturates the surface behind YouTube's real topbar controls.
+The YouTube masthead is transparent while ambient mode is active, so it shares the exact same full-page ambient pixels as the content below. There is no independent crop, blur strip, relay, or canvas in the header; this is what removes the visible division between topbar and content.
 
-Both relay and canvas topbar surfaces have pointer events disabled. The real YouTube logo, search box, account controls, and other masthead controls stay above them and remain clickable. Relay elements use `srcObject` from the existing player's captured stream, so they do not fetch a second YouTube media URL or create a second decode pipeline.
+The real YouTube logo, search box, account controls, and other masthead controls remain clickable and stay above the ambient layer.
 
 ### Normal and Theater modes
 
-Version 1.5 observes YouTube's native watch-layout attributes. Switching between normal mode and Theater mode updates the ambient layout without replacing YouTube's player. Full-bleed/theater containers become transparent only while ambient mode is active, and the live-video topbar stays attached through the transition.
+Switching between normal mode and Theater mode updates the ambient layout without replacing YouTube's player. Full-bleed/theater containers and the masthead remain transparent only while ambient mode is active, so both layouts use the same continuous background surface.
 
 ### YouTube logo
 
@@ -45,7 +51,7 @@ Ad Shield is enabled by default and combines four best-effort layers:
 1. Manifest V3 declarativeNetRequest rules block a scoped set of common advertising hosts and YouTube ad endpoints.
 2. A packaged MAIN-world guard sanitizes known advertising fields from YouTube player responses before the player consumes them.
 3. Cosmetic rules hide known YouTube ad slots, promoted containers, and overlays.
-4. In-player handling clicks a visible Skip Ad control when available; otherwise it can temporarily mute/accelerate a positively detected ad and restore playback state when the ad ends.
+4. In-player handling immediately hides positively detected ad media, tries a visible Skip Ad button and the player skip API, seeks short detected ad segments to their tail when safe, and falls back to temporary muted 16x playback before restoring the user's state.
 
 Ad Shield deliberately does **not** broadly block googlevideo.com because ordinary YouTube video delivery also uses that infrastructure. YouTube changes ad delivery frequently and may use server-side insertion or experiments that do not match these rules, so Ad Shield is best-effort rather than a guarantee that every ad will always be removed.
 
@@ -63,11 +69,11 @@ Focus Fill expands the real YouTube player to the browser viewport. Press **Esc*
 
 ## Performance design
 
-- Reuses YouTube's already-decoded player. v1.5.2 may create local muted relay elements, but they receive the existing captured MediaStream via `srcObject`; there is no duplicate YouTube download or second decoder.
+- Reuses YouTube's already-decoded player. The preferred path creates one local muted full-page relay fed by the existing captured MediaStream via srcObject; there is no duplicate YouTube download or second decoder.
 - Default ambient canvas fallback is approximately **484x272** at Softness 42 and 4 FPS.
-- The preferred live path uses the captured stream. The compatibility topbar canvas is **640x64 @ ~4 FPS**, about **0.164 MP/s** of canvas copying when that fallback is active.
+- The unified header adds **0 extra canvas MP/s** and no second masthead relay/compositor surface; it simply reveals the existing full-page ambient surface.
 - Softness is implemented mainly through downsampling instead of a full-resolution per-frame Gaussian blur.
-- The relay path adds compositor surfaces; the fallback canvas path remains throttled and bounded.
+- The relay path adds one local compositor/video surface; the fallback canvas path remains throttled and bounded.
 - Rendering stops when hidden, paused, ended, disabled, or off a valid watch page.
 - Ad acceleration uses a short-lived watchdog only while YouTube positively reports an in-player ad.
 - YouTube SPA navigation and normal/theater transitions reuse observers and clean them up when inactive.
@@ -100,7 +106,7 @@ The code cannot run unless the browser actually loads the unpacked extension. Cu
 
 ## Controls
 
-The popup contains the master enable toggle, startup mode, Scroll Dock controls, Live-video topbar toggle, Ad Shield toggle, Calm reading, Glass comments, brightness/softness, render FPS, canvas quality, Dock/undock, Focus Fill, and Reset defaults.
+The popup contains the master enable toggle, startup mode, Scroll Dock controls, Unified ambient header toggle, Ad Shield toggle, Calm reading, Glass comments, brightness/softness, render FPS, canvas quality, Dock/undock, Focus Fill, and Reset defaults.
 
 Keyboard shortcuts inside YouTube pages:
 

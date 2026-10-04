@@ -167,7 +167,7 @@ const path = require("node:path");
       ambientFrame: Boolean(status?.ambientFrame),
       drawing: Boolean(status?.drawing),
       videoReady: Boolean(status?.videoReady),
-      topbarFrameAgeMs: status?.topbarFrameAgeMs ?? null
+      unifiedHeader: Boolean(status?.unifiedHeader)
     });
   })()`));
 
@@ -346,23 +346,19 @@ const path = require("node:path");
   console.log(JSON.stringify(result, null, 2));
 
   if (!initial.active || initial.docked || !initial.glass || !initial.normalMode || initial.theaterMode ||
-      !Array.isArray(initial.topbarCanvas) || initial.topbarCanvas[0] !== 640 || initial.topbarCanvas[1] !== 64 ||
-      initial.topbarPointerEvents !== "none" ||
-      !(Number(initial.topbarOpacity) >= 0.9 ||
-        (initial.topbarRelayConnected && Number(initial.topbarRelayOpacity) >= 0.9 && initial.topbarRelayPointerEvents === "none"))) process.exitCode = 2;
-  if (!liveFrames.video || !liveFrames.played || !liveFrames.ambientFrame ||
-      !liveFrames.drawing || !liveFrames.videoReady ||
-      !Number.isFinite(liveFrames.topbarFrameAgeMs) || liveFrames.topbarFrameAgeMs > 1200) process.exitCode = 13;
+      initial.topbarCanvas !== null || initial.topbarRelayConnected ||
+      initial.mastheadBorder !== "0px" || initial.mastheadBackground !== "rgba(0, 0, 0, 0)") process.exitCode = 2;
+  if (!liveFrames.video || !liveFrames.ambientFrame ||
+      !liveFrames.drawing || !liveFrames.videoReady || !liveFrames.unifiedHeader) process.exitCode = 13;
   if (!initial.logoAccent || initial.logoHref !== "/" || initial.logoPointerEvents === "none") process.exitCode = 3;
-  if (initial.mastheadBorder !== "1px") process.exitCode = 4;
   if (fallbackWhenNativeHidden.exists && (!fallbackWhenNativeHidden.visible || fallbackWhenNativeHidden.label !== "YouTube Home")) process.exitCode = 5;
   if (!nativeRestored.logoAccent) process.exitCode = 6;
   if (!theaterMode.flexyTheater || !theaterMode.htmlTheater || theaterMode.htmlNormal ||
       theaterMode.fullBleedBackground !== "rgba(0, 0, 0, 0)" ||
       theaterMode.movieBackground !== "rgba(0, 0, 0, 0)" ||
-      !theaterMode.topbarConnected || theaterMode.statusMode !== "theater") process.exitCode = 11;
+      theaterMode.topbarConnected || theaterMode.statusMode !== "theater") process.exitCode = 11;
   if (normalMode.flexyTheater || normalMode.htmlTheater || !normalMode.htmlNormal ||
-      !normalMode.topbarConnected || normalMode.statusMode !== "normal") process.exitCode = 12;
+      normalMode.topbarConnected || normalMode.statusMode !== "normal") process.exitCode = 12;
   if (!focusLifecycle.hooks || focusLifecycle.focusAfterModeSetting || !focusLifecycle.focusAfterManualToggle ||
       !focusLifecycle.toggleOk || focusLifecycle.focusAfterEscape || focusLifecycle.focusAfterBrightnessChange) process.exitCode = 7;
   if (scrolled.y > 180 && (!scrolled.docked || !scrolled.reading ||

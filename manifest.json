@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Fullbleed Ambient",
-  "version": "1.5.2",
-  "description": "YouTube ambient background with normal/theater support, captureStream live background/topbar, scroll dock, focus fill, and multi-layer Ad Shield.",
+  "version": "1.6.0",
+  "description": "YouTube ambient background with normal/theater support, single-surface unified ambient header/background, scroll dock, focus fill, and multi-layer Ad Shield.",
   "permissions": [
     "storage",
     "declarativeNetRequest"

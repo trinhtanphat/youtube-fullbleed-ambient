@@ -90,84 +90,29 @@ html.ytfb-active ytd-app {
 }
 
 /*
- * Masthead polish: keep YouTube's real logo and controls, then add a cheap
- * translucent treatment. No backdrop-filter or full-width animated blur.
+ * Unified masthead: the header has no separately cropped video/canvas.
+ * It is transparent so the exact same full-page ambient pixels continue
+ * behind YouTube's logo, search box, and account controls.
  */
 html.ytfb-active #masthead-container,
-html.ytfb-active ytd-masthead#masthead {
-  isolation: isolate;
-  overflow: hidden;
-  border-bottom: 1px solid color-mix(in srgb, #ff0033 26%, transparent);
-  box-shadow:
-    0 1px 0 rgba(255,255,255,.04),
-    0 10px 28px rgba(0,0,0,.16);
+html.ytfb-active ytd-masthead#masthead,
+html.ytfb-active ytd-masthead#masthead #background {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
 }
 
 html.ytfb-active #masthead-container {
-  background: color-mix(
-    in srgb,
-    var(--yt-spec-base-background, #0f0f0f) 76%,
-    transparent
-  ) !important;
-}
-
-html.ytfb-active.ytfb-topbar-video-enabled #masthead-container {
-  background: color-mix(
-    in srgb,
-    var(--yt-spec-base-background, #0f0f0f) 7%,
-    transparent
-  ) !important;
-}
-
-#ytfb-topbar-video,
-#ytfb-topbar-relay {
-  position: absolute;
-  inset: -6px -2%;
-  z-index: 0;
-  width: 104%;
-  height: calc(100% + 12px);
-  pointer-events: none;
-  object-fit: cover;
-  opacity: 1;
-  transform: scale(1.02);
-  image-rendering: auto;
-  filter: blur(5px) brightness(.84) saturate(1.50) contrast(1.12);
-}
-
-#ytfb-topbar-relay {
-  opacity: 0;
-}
-
-html.ytfb-topbar-relay-live #ytfb-topbar-relay {
-  opacity: 1;
-}
-
-html.ytfb-topbar-relay-live #ytfb-topbar-video {
-  opacity: 0;
+  overflow: visible !important;
 }
 
 html.ytfb-active ytd-masthead#masthead {
   position: relative;
   z-index: 1;
-  background:
-    linear-gradient(
-      100deg,
-      rgba(255,0,51,.07) 0%,
-      rgba(10,10,10,.04) 28%,
-      rgba(10,10,10,.04) 72%,
-      rgba(255,0,51,.03) 100%
-    ) !important;
-}
-
-html.ytfb-active.ytfb-topbar-video-enabled ytd-masthead#masthead {
-  background:
-    linear-gradient(
-      100deg,
-      rgba(255,0,51,.06) 0%,
-      rgba(4,4,4,.06) 24%,
-      rgba(4,4,4,.06) 76%,
-      rgba(255,0,51,.03) 100%
-    ) !important;
+  overflow: visible !important;
 }
 
 html.ytfb-active ytd-masthead#masthead #start,
@@ -175,6 +120,11 @@ html.ytfb-active ytd-masthead#masthead #center,
 html.ytfb-active ytd-masthead#masthead #end {
   position: relative;
   z-index: 1;
+}
+
+#ytfb-topbar-video,
+#ytfb-topbar-relay {
+  display: none !important;
 }
 
 html.ytfb-active .ytfb-logo-anchor {
@@ -328,8 +278,14 @@ html.ytfb-active ytd-watch-flexy ytd-watch-metadata {
  * available to the runtime instead of being hidden by CSS.
  */
 html.ytfb-ad-shield #player-ads,
-html.ytfb-ad-shield .ytp-ad-overlay-container,
 html.ytfb-ad-shield .ytp-ad-text-overlay,
+html.ytfb-ad-shield .ytp-ad-image-overlay,
+html.ytfb-ad-shield .ytp-ad-action-interstitial,
+html.ytfb-ad-shield .ytp-ad-player-overlay-instream-info,
+html.ytfb-ad-shield .ytp-ad-message-container,
+html.ytfb-ad-shield .ytp-ad-preview-container,
+html.ytfb-ad-shield .ytp-ad-persistent-progress-bar-container,
+html.ytfb-ad-shield .ytp-ad-overlay-container,
 html.ytfb-ad-shield ytd-ad-slot-renderer,
 html.ytfb-ad-shield ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
 html.ytfb-ad-shield ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
@@ -342,6 +298,38 @@ html.ytfb-ad-shield ytd-search-pyv-renderer,
 html.ytfb-ad-shield ytd-action-companion-ad-renderer,
 html.ytfb-ad-shield ytd-engagement-panel-section-list-renderer[target-id*="ads"] {
   display: none !important;
+}
+
+/*
+ * While YouTube positively reports an in-player ad, never show the ad media.
+ * Freeze the ambient page on the content thumbnail while skip/seek/16x logic
+ * clears the segment. Skip controls stay in the DOM so cleanupAds can click
+ * them immediately.
+ */
+html.ytfb-ad-shield:has(#movie_player.ad-showing) #ytfb-root .ytfb-relay,
+html.ytfb-ad-shield:has(#movie_player.ad-showing) #ytfb-root canvas,
+html.ytfb-ad-shield:has(#movie_player.ad-interrupting) #ytfb-root .ytfb-relay,
+html.ytfb-ad-shield:has(#movie_player.ad-interrupting) #ytfb-root canvas,
+html.ytfb-ad-active #ytfb-root .ytfb-relay,
+html.ytfb-ad-active #ytfb-root canvas {
+  opacity: 0 !important;
+}
+
+html.ytfb-ad-shield:has(#movie_player.ad-showing) #ytfb-root .ytfb-fallback,
+html.ytfb-ad-shield:has(#movie_player.ad-interrupting) #ytfb-root .ytfb-fallback,
+html.ytfb-ad-active #ytfb-root .ytfb-fallback {
+  opacity: 1 !important;
+}
+
+html.ytfb-ad-active #movie_player,
+html.ytfb-ad-active #movie_player .html5-video-container {
+  background: transparent !important;
+}
+
+html.ytfb-ad-shield #movie_player.ad-showing video.html5-main-video,
+html.ytfb-ad-shield #movie_player.ad-interrupting video.html5-main-video,
+html.ytfb-ad-active #movie_player video.html5-main-video {
+  opacity: 0 !important;
 }
 
 /* One calm translucent panel instead of blurring every comment card. */
