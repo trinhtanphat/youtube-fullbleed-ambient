@@ -1,26 +1,26 @@
 # Performance notes
 
+Performance is a design constraint. The extension reuses YouTube's already-decoded player and does not fetch a second media URL.
+
 ## v1.5.2 relay architecture
 
-The preferred live path is now a captured MediaStream from the already-decoded YouTube video. The same stream is assigned with `srcObject` to the full-page ambient relay and masthead relay. This adds compositing surfaces, but no duplicate media URL, network transfer, or second decode pipeline. When the relay is live, the canvas copy path is skipped; the bounded canvas renderer remains available only as fallback.
+The preferred live path uses `HTMLVideoElement.captureStream()` on YouTube's existing player. One captured MediaStream is assigned with `srcObject` to a muted full-page relay video and a muted masthead relay video.
 
+This means:
 
+- no second YouTube media URL;
+- no duplicate network transfer;
+- no second decode pipeline;
+- two additional compositor/video surfaces can still add CPU/GPU work;
+- when relay capture is unavailable or stalls, the bounded canvas renderer remains the compatibility fallback.
 
-## v1.5.1 refresh watchdog
+A 500 ms heartbeat watches relay progress. If the relay clock stops while the source video is still playing, the relay is rebuilt; if capture cannot recover, the canvas path continues.
 
-The renderer now keeps the configured-FPS timer as a watchdog even when `requestVideoFrameCallback` is available, plus a 500 ms heartbeat that only restarts or force-refreshes a stranded renderer. Both frame paths still call the same throttled draw function, so duplicate callbacks do not double the canvas copy rate. The heartbeat adds negligible scheduling work and is suspended while the document is hidden.
+## Canvas fallback budget
 
-Performance is a design constraint. The extension reuses YouTube's existing video element and never starts a second network stream or video decoder.
+The fallback ambient layer downsamples the playing video into a bounded canvas. Softness lowers the effective canvas resolution rather than applying a full-resolution per-frame Gaussian blur.
 
-## v1.5 frame scheduling
-
-When available, `requestVideoFrameCallback` drives the ambient and masthead sampling from actual decoded video frames. Rendering remains throttled by the configured ambient FPS. A timer fallback is used on browsers without that API. This avoids stale canvases while keeping the same low-resolution sampling model.
-
-## Pixel budget
-
-The main ambient layer downsamples the playing video into a bounded canvas. Softness lowers the dynamic canvas resolution instead of applying a full-resolution per-frame Gaussian blur.
-
-At the default Softness value (42), a 4K source is reduced to:
+At Softness 42, a 4K source is reduced to:
 
 | Preset | Effective canvas | 2 FPS | 4 FPS | 6 FPS | 10 FPS |
 |---|---:|---:|---:|---:|---:|
@@ -28,92 +28,115 @@ At the default Softness value (42), a 4K source is reduced to:
 | Medium | 484x272 | 0.263 MP/s | 0.527 MP/s | 0.790 MP/s | 1.316 MP/s |
 | High | 728x408 | 0.594 MP/s | 1.188 MP/s | 1.782 MP/s | 2.970 MP/s |
 
-The default is **Medium / 4 FPS / Softness 42**, about **0.527 MP/s** of ambient-canvas copies.
+The default fallback budget is **Medium / 4 FPS**, about **0.527 MP/s** of ambient-canvas copies.
 
-## v1.5 live-video topbar
+## Live-video topbar
 
-The masthead effect adds a second canvas surface, but not a second media element or decoder. Its internal surface is **640x64 @ ~4 FPS** by piggybacking on the ambient render loop:
+When the captureStream relay is healthy, the topbar is fed by the same captured MediaStream as the full-page background. There is no additional media download or decode, but the second relay element is another compositor surface.
 
-**480 x 36 x 2 = 0.035 MP/s**
+If relay capture is unavailable, the topbar falls back to a **640x64 @ ~4 FPS** canvas:
 
-That modeled copy workload is about 6.6% of the default ambient canvas copy workload. CSS enlarges and blurs the small surface behind YouTube's real masthead. The canvas has pointer events disabled so the native controls remain interactive.
+**640 x 64 x 4 = 0.164 MP/s**
 
-Normal mode and Theater mode use the same surfaces. The extension observes YouTube's watch-layout attributes and changes transparency/anchoring rather than creating another player.
+That is about 31% of the default ambient-canvas copy budget. The surface has pointer events disabled so YouTube's native logo, search, and account controls remain interactive.
 
-## v1.5 Ad Shield runtime behavior
+Normal mode and Theater mode use the same relay/canvas pipeline. The extension changes transparency and anchoring around YouTube's native player rather than replacing it.
 
-Network blocking is handled by scoped Manifest V3 declarative rules and adds no per-frame rendering work. A packaged MAIN-world guard removes a bounded set of known ad-related fields from YouTube player responses. Cosmetic hiding is ordinary CSS.
+## v1.5.2 installed-runtime visual audit
 
-In-player handling uses a dedicated player observer. A visible Skip Ad control is clicked when available. For a positively detected unskippable ad, a short-lived watchdog can maintain mute + accelerated playback and then restore the prior playback rate/mute state after the ad condition clears.
+On Windows 181, the unpacked extension was verified as:
 
-The extension deliberately does not broadly block shared YouTube media delivery hosts such as googlevideo.com.
+- version **1.5.2**;
+- state **ENABLED**;
+- location **UNPACKED**;
+- path **C:\Work\youtube-fullbleed-ambient**.
 
-## Browser smoke coverage
+Using Chrome **153.0.8010.53**, a moving YouTube video, and the installed extension without `cdp-inject.js`:
 
-The runtime smoke/audit checks:
+- full-page relay clock advanced with the source video;
+- masthead relay clock advanced with the same captured stream;
+- isolated full-page background screenshots changed over time;
+- isolated masthead screenshots changed over time;
+- the checks passed in both **Normal** and **Theater** modes.
 
-- ambient activation in normal mode;
-- native Theater mode transition and return to normal;
-- transparent full-bleed/theater backgrounds while ambient is active;
-- live topbar canvas remains connected at 640x64;
-- topbar pointer events are disabled;
-- native masthead controls remain interactive;
-- cosmetic ad containers are hidden;
-- synthetic skip/accelerate paths restore playback state;
-- Focus Fill and SPA lifecycle cleanup.
+The reusable command is:
 
-Synthetic ad tests verify the handling code path; they do not claim a specific live advertising campaign will always be present or always use the same delivery method.
+```powershell
+npm run audit:live -- 9295 --strict-motion --require-installed
+```
 
-## Windows 181 observations
+Use a video with visible motion when `--strict-motion` is enabled; a genuinely static source image can correctly produce identical screenshot hashes.
 
-Earlier measurements were collected on the Windows 181 VM with Chrome 153, 32 logical CPUs, VMware SVGA 3D, and an isolated YouTube profile. Those numbers are useful as rough observations, not extension-only benchmarks.
+## Ad Shield runtime cost and coverage
 
-| Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
+Network blocking uses scoped Manifest V3 declarative rules and has no per-frame rendering cost. A packaged MAIN-world guard removes a bounded set of known ad-related fields from YouTube player responses. Cosmetic hiding is ordinary CSS.
+
+The installed-runtime audit also verified:
+
+- `#player-ads` is hidden;
+- a synthetic visible Skip Ad control is clicked automatically;
+- a positively detected unskippable-ad state is temporarily accelerated to **16x** and muted;
+- playback rate is restored after the ad state clears.
+
+The extension deliberately does not broadly block shared YouTube media delivery hosts such as `googlevideo.com`.
+
+## Current Windows 181 performance sample
+
+Environment:
+
+- Windows build 10.0.26200;
+- Chrome 153.0.8010.53;
+- 32 logical CPUs;
+- VMware SVGA 3D driver 9.17.11.4;
+- one YouTube watch page playing a moving 1280x720 source;
+- extension settings: Medium, 4 FPS fallback, brightness 68, softness 65, live topbar on.
+
+A 10-second whole-Chrome-process-tree sample measured:
+
+| Phase | Whole-machine CPU | One-core equivalent | Working set | Private bytes |
 |---|---:|---:|---:|---:|
-| Baseline, earlier warm-up | 1.060% | 33.91% | 866.1 MB | 494.3 MB |
-| Ambient | 2.314% | 74.06% | 1031.0 MB | 509.7 MB |
-| Baseline, post-reload/warm | 0.195% | 6.25% | 1156.7 MB | 570.3 MB |
-| Ambient, warmed 15 s | 1.992% | 63.75% | 1248.5 MB | 522.7 MB |
+| Extension master disabled | 1.646% | 52.66% | 756.5 MB | 608.9 MB |
+| v1.5.2 ambient + live topbar enabled | 5.146% | 164.69% | 744.1 MB | 581.7 MB |
 
-A later masthead pass measured:
+The active sample was about **3.50 percentage points** higher at whole-machine scale on this 32-thread VM. That is a material compositor cost, but it was not accompanied by higher private memory in this run. These values are not portable extension-only benchmarks: YouTube decoding, scene complexity, browser scheduling, caching, VM graphics, and concurrent Chrome processes all add noise.
 
-| Phase | Whole 32-thread VM CPU | One-core equivalent | Working set | Private bytes |
-|---|---:|---:|---:|---:|
-| YouTube baseline after reload | 0.259% | 8.28% | 1037.7 MB | 551.3 MB |
-| Ambient + static/hover logo treatment | 2.285% | 73.12% | 1347.3 MB | 555.3 MB |
+### Short memory stability sample
 
-These runs predate the final v1.5 topbar dimensions and are retained only as historical VM observations. YouTube playback, decoding, caching, source resolution, browser version, and the virtual graphics stack produce large variance.
-
-### Earlier memory stability check
-
-One 30-second follow-up showed no monotonic private-memory growth:
+With v1.5.2 active, five samples over 20 seconds were:
 
 | Time | Chrome processes | Working set | Private bytes |
 |---:|---:|---:|---:|
-| 0 s | 11 | 1342.1 MB | 534.7 MB |
-| 10 s | 10 | 1322.0 MB | 520.0 MB |
-| 20 s | 10 | 1324.4 MB | 517.0 MB |
-| 30 s | 10 | 1322.5 MB | 518.9 MB |
+| 0 s | 11 | 730.7 MB | 575.7 MB |
+| 5 s | 11 | 728.0 MB | 579.6 MB |
+| 10 s | 11 | 727.8 MB | 578.5 MB |
+| 15 s | 11 | 724.2 MB | 575.3 MB |
+| 20 s | 11 | 717.6 MB | 575.2 MB |
 
-This is evidence against an obvious short-run leak, not proof that no leak could appear over hours or days.
+Private memory was not monotonically increasing, so there is no sign of an obvious short-run leak in this sample. This does not prove leak-free behavior over hours or days.
 
 ## GPU observation
 
-A trustworthy extension-only VRAM delta is not available from the 181 VMware graphics stack. The implementation limits pressure structurally:
+The 181 VM exposes VMware SVGA 3D rather than a physical GPU with trustworthy extension-only VRAM telemetry, so a precise VRAM delta is not available.
 
-- one existing YouTube decoder;
-- one bounded ambient canvas;
-- one small 640x64 topbar canvas;
-- no second video stream;
-- no full-resolution copy surface;
+The implementation limits pressure structurally:
+
+- one YouTube network stream and decoder;
+- one captured MediaStream;
+- two local muted relay surfaces on the preferred path;
+- bounded low-resolution canvas surfaces only as fallback;
+- no second media URL;
+- no full-resolution canvas copy surface;
 - no per-frame full-resolution Gaussian blur;
-- rendering stops when hidden, paused, ended, disabled, or off a valid watch page.
+- relay/canvas cleanup on navigation, disable, and source replacement.
 
-## Practical presets
+## Practical settings
 
-- **Medium / 4 FPS**: default balance.
-- **Low / 2-4 FPS**: best for laptops, battery use, VMs, or remote desktops.
-- **6 FPS**: smoother ambient motion with moderate extra work.
-- **High / 10 FPS**: intentionally more expensive.
+- **Live topbar on**: best visual effect; adds a second relay/compositor surface when captureStream is active.
+- **Live topbar off**: reduces one visual/compositor surface while keeping the full-page ambient relay.
+- **Low / 2-4 FPS**: lowers cost when the extension is using the canvas fallback path.
+- **Medium / 4 FPS**: balanced fallback default.
+- **High / 10 FPS**: intentionally more expensive when canvas fallback is active.
 
-Run `npm run perf` after changing rendering defaults.
+The FPS selector controls the canvas fallback rate. A healthy captureStream relay follows decoded video timing instead of the fallback FPS limit.
+
+Run `npm run perf` after changing fallback dimensions or FPS defaults.

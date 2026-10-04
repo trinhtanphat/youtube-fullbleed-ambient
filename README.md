@@ -26,9 +26,9 @@ The current video is sampled into a bounded low-resolution canvas and stretched 
 
 ### Live-video topbar
 
-The masthead receives a separate **640x64** canvas sampled from the currently playing video at roughly **2 FPS**. CSS enlarges, blurs, darkens, and saturates that tiny surface behind YouTube's real topbar controls.
+On Chromium builds that support it, the masthead uses a muted local relay video fed by the same captured MediaStream as the full-page ambient layer. If captureStream is unavailable or stalls, a **640x64 @ ~4 FPS** canvas fallback keeps the masthead animated. CSS enlarges, blurs, darkens, and saturates the surface behind YouTube's real topbar controls.
 
-The topbar canvas has pointer events disabled. The real YouTube logo, search box, account controls, and other masthead controls stay above it and remain clickable. This is a visual sample of the existing video, not another media element or decoder.
+Both relay and canvas topbar surfaces have pointer events disabled. The real YouTube logo, search box, account controls, and other masthead controls stay above them and remain clickable. Relay elements use `srcObject` from the existing player's captured stream, so they do not fetch a second YouTube media URL or create a second decode pipeline.
 
 ### Normal and Theater modes
 
@@ -63,11 +63,11 @@ Focus Fill expands the real YouTube player to the browser viewport. Press **Esc*
 
 ## Performance design
 
-- Reuses YouTube's existing video element: no duplicate stream or decoder.
-- Default ambient canvas is approximately **484x272** at Softness 42 and 4 FPS.
-- Live-video topbar is **640x64 at about 2 FPS**, roughly **0.035 MP/s** of extra canvas copying.
+- Reuses YouTube's already-decoded player. v1.5.2 may create local muted relay elements, but they receive the existing captured MediaStream via `srcObject`; there is no duplicate YouTube download or second decoder.
+- Default ambient canvas fallback is approximately **484x272** at Softness 42 and 4 FPS.
+- The preferred live path uses the captured stream. The compatibility topbar canvas is **640x64 @ ~4 FPS**, about **0.164 MP/s** of canvas copying when that fallback is active.
 - Softness is implemented mainly through downsampling instead of a full-resolution per-frame Gaussian blur.
-- Topbar sampling piggybacks on the ambient render loop instead of adding another continuous animation loop.
+- The relay path adds compositor surfaces; the fallback canvas path remains throttled and bounded.
 - Rendering stops when hidden, paused, ended, disabled, or off a valid watch page.
 - Ad acceleration uses a short-lived watchdog only while YouTube positively reports an in-player ad.
 - YouTube SPA navigation and normal/theater transitions reuse observers and clean them up when inactive.
@@ -124,6 +124,7 @@ It does not request cookies, browsing history, or remote-code permissions.
 npm test
 npm run check
 npm run perf
+npm run audit:live -- 9295 --strict-motion --require-installed
 ```
 
 For a debug-enabled local browser:
@@ -136,7 +137,7 @@ node scripts/cdp-dom-audit.js 9244
 
 The automated suite covers settings normalization, pixel budgets, normal/theater transitions, manifest permissions, packaged files, local-code-only checks, player-response sanitization, Ad Shield rule construction, static MAIN-world guard declaration, and icon validity.
 
-The browser smoke checks the live masthead surface, normal/Theater transitions, native-logo controls, Scroll Dock, Focus Fill lifecycle, cosmetic ad hiding, synthetic Skip Ad handling, ad acceleration, and playback restoration.
+The browser smoke checks the live masthead surface, normal/Theater transitions, native-logo controls, Scroll Dock, Focus Fill lifecycle, cosmetic ad hiding, synthetic Skip Ad handling, ad acceleration, and playback restoration. `audit:live` does not inject the extension: it audits the installed unpacked runtime through CDP, verifies source/relay clocks advance, and compares two real screenshots of the isolated background and masthead to prove visible motion on a moving video.
 
 ## Privacy
 
@@ -146,7 +147,7 @@ No analytics, tracking, accounts, remote scripts, or external extension services
 
 - YouTube frequently changes DOM, CSS, player responses, and ad delivery.
 - Server-side-inserted ads can be indistinguishable from ordinary media delivery; aggressive shared-media blocking can break video playback, so this extension avoids it.
-- Browser/DRM policy can prevent canvas frame capture for some protected media; the ambient layer can fall back to a static thumbnail.
+- Browser/DRM policy can prevent `captureStream()` or canvas sampling for some protected media. The extension falls back from relay to bounded canvas and finally to a static thumbnail when live capture is unavailable.
 - YouTube experiments or its native miniplayer can occasionally interact with Scroll Dock layout.
 - Focus Fill is an in-page viewport override, not the browser Fullscreen API.
 - CPU/GPU results vary by browser, driver, VM, display scaling, source codec, and YouTube experiments.
