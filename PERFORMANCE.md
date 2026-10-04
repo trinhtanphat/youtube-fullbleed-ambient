@@ -1,5 +1,9 @@
 # Performance notes
 
+## v1.8.0 response hardening
+
+The new response guard adds no video decoder, canvas, or animation work. It only inspects candidate YouTube playback responses and returns the native response unchanged when no known ad marker is present. Rebuilding occurs only when an ad-bearing JSON payload is actually sanitized.
+
 ## v1.7.1 ad-detection hotfix
 
 The hotfix adds no media or canvas work. It only broadens positive ad-state detection inside the existing player subtree and reduces the mutation cleanup debounce from 50 ms to 12 ms.

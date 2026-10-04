@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "..");
 const js = fs.readFileSync(path.join(root, "content.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "content.css"), "utf8");
 const sanitizer = fs.readFileSync(path.join(root, "ad-sanitize.js"), "utf8");
+const guard = fs.readFileSync(path.join(root, "page-guard.js"), "utf8");
 
 test("detected in-player ads are visually suppressed immediately", () => {
   assert.match(js, /ytfb-ad-active/);
@@ -57,4 +58,16 @@ test("generic visible ytp-ad UI and localized labels are positive fallback signa
 
 test("ad mutation cleanup uses the low-latency debounce", () => {
   assert.equal(js.includes("function queueAdCleanup(delay = 12)"), true);
+});
+
+
+test("MAIN-world guard covers globals, fetch, text, json, and arrayBuffer response paths", () => {
+  assert.match(guard, /installSanitizedGlobal\("ytInitialPlayerResponse"\)/);
+  assert.match(guard, /installSanitizedGlobal\("playerResponse"\)/);
+  assert.match(guard, /globalThis\.fetch = async function ytfbFetch/);
+  assert.match(guard, /Response\.prototype\.json = async function ytfbResponseJson/);
+  assert.match(guard, /Response\.prototype\.text = async function ytfbResponseText/);
+  assert.match(guard, /Response\.prototype\.arrayBuffer = async function ytfbResponseArrayBuffer/);
+  assert.match(guard, /S\.sanitizeJsonText\(raw, responseUrl\)/);
+  assert.match(guard, /S\.sanitizeArrayBuffer\(buffer, this\.url\)/);
 });

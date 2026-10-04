@@ -1,5 +1,9 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.0 response-path hardening
+
+Ad Shield now sanitizes YouTube playback ad payloads across more response paths before they can become visible UI. The MAIN-world guard covers both `ytInitialPlayerResponse` and `playerResponse`, handles `fetch`, `Response.json()`, `Response.text()`, and `Response.arrayBuffer()`, and recognizes player/watch/playlist playback endpoints. Existing DOM skip/seek/16x fallbacks remain in place for server-side or experimental variants that cannot be removed safely at the response layer.
+
 ## v1.7.1 YouTube ad-detection hotfix
 
 The previous localized Skip fallback contained mojibake after a Windows encoding round-trip, so Vietnamese **Bỏ qua** could fail to match. v1.7.1 moves label matching into tested, accent-folding helpers and adds a visible generic `ytp-ad-*` plus sponsored-label fallback. Mutation-driven cleanup is also queued faster so a newly mounted ad card is shielded with less visual leakage.
