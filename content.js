@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.6.0";
+  const RUNTIME_VERSION = "1.6.1";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -451,6 +451,9 @@
     ".ytp-ad-skip-button",
     ".ytp-ad-skip-button-modern",
     ".ytp-ad-skip-button-container button",
+    ".ytp-ad-skip-ad-slot button",
+    ".ytp-ad-player-overlay-skip-or-preview button",
+    ".video-ads [class*='ad-skip'] button",
     ".video-ads .ytp-ad-skip-button",
     ".video-ads .ytp-ad-skip-button-modern",
     ".video-ads button[class*='skip']",
@@ -469,6 +472,9 @@
     ".ytp-ad-simple-ad-badge",
     ".ytp-ad-duration-remaining",
     ".ytp-ad-player-overlay",
+    ".ytp-ad-player-overlay-layout__ad-info-container",
+    ".ytp-ad-player-overlay-skip-or-preview",
+    ".ytp-ad-skip-ad-slot",
     ".ytp-ad-action-interstitial",
     ".ytp-ad-player-overlay-instream-info",
     ".ytp-ad-message-container",
@@ -591,7 +597,7 @@
     }
 
     clickFirstVisible(AD_CLOSE_SELECTORS);
-    if (clickFirstVisible(AD_SKIP_SELECTORS)) {
+    if (tryClickAdSkip()) {
       state.adSkipClicks += 1;
       state.adTimer = setTimeout(keepAdAccelerated, 60);
       return;
@@ -628,6 +634,34 @@
     return false;
   }
 
+  const AD_SKIP_LABEL_RE = /^(?:skip(?:\s+ad(?:s)?)?|bỏ\s+qua(?:\s+quảng\s+cáo)?|omitir(?:\s+anuncio)?|saltar(?:\s+anuncio)?|ignorer(?:\s+l['’]annonce)?|überspringen|salta(?:\s+annuncio)?|広告をスキップ)$/i;
+
+  function clickLocalizedSkipControl() {
+    const player = document.querySelector("#movie_player");
+    if (!player) return false;
+
+    for (const element of player.querySelectorAll("button, [role='button']")) {
+      const labels = [
+        element.getAttribute("aria-label"),
+        element.getAttribute("title"),
+        element.textContent
+      ].filter(Boolean).map((label) => String(label).replace(/\s+/g, " ").trim());
+
+      if (!labels.some((label) => AD_SKIP_LABEL_RE.test(label))) continue;
+
+      // Once YouTube positively reports an ad, clicking a hidden-but-present
+      // localized Skip control is safe and avoids a race with our cosmetic
+      // shield. Some 2026 layouts do not keep a stable skip-button class.
+      element.click();
+      return true;
+    }
+    return false;
+  }
+
+  function tryClickAdSkip() {
+    return clickFirstVisible(AD_SKIP_SELECTORS) || clickLocalizedSkipControl();
+  }
+
   function queueAdCleanup(delay = 50) {
     if (state.adCleanupTimer !== null) return;
     state.adCleanupTimer = setTimeout(() => {
@@ -660,7 +694,7 @@
 
     clickFirstVisible(AD_CLOSE_SELECTORS);
 
-    if (clickFirstVisible(AD_SKIP_SELECTORS)) {
+    if (tryClickAdSkip()) {
       state.adSkipClicks += 1;
       queueAdCleanup(40);
       return;

@@ -1,4 +1,4 @@
-﻿const test = require("node:test");
+const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -33,5 +33,18 @@ test("sanitizer recognizes modern player ad payload keys", () => {
   ]) {
     assert.match(sanitizer, new RegExp(key));
   }
+});
+
+test("2026 interactive player overlay is hidden without hiding the whole ad module", () => {
+  assert.match(css, /html\.ytfb-ad-shield \.ytp-ad-player-overlay,/);
+  assert.match(css, /ytp-ad-player-overlay-layout__ad-info-container/);
+  assert.doesNotMatch(css, /html\.ytfb-ad-shield \.video-ads\.ytp-ad-module\s*\{/);
+});
+
+test("localized skip controls include Vietnamese fallback", () => {
+  assert.match(js, /AD_SKIP_LABEL_RE/);
+  assert.match(js, /bỏ\\s\+qua/);
+  assert.match(js, /function clickLocalizedSkipControl/);
+  assert.match(js, /function tryClickAdSkip/);
 });
 

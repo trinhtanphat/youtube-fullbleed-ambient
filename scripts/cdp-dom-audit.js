@@ -44,21 +44,31 @@
     if (!player) return false;
 
     globalThis.__ytfbAdSkipClicked = false;
+    globalThis.__ytfbOverlayDisplayAtSkip = null;
     document.getElementById("ytfb-audit-skip")?.remove();
+    document.getElementById("ytfb-audit-ad-card")?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "ytfb-audit-ad-card";
+    overlay.className = "ytp-ad-player-overlay-layout__ad-info-container";
+    overlay.textContent = "ByteDance GLM-5.3 · Được tài trợ";
+    overlay.style.cssText = "position:absolute;inset:0;background:#173c70;z-index:20";
 
     const button = document.createElement("button");
     button.id = "ytfb-audit-skip";
-    button.className = "ytp-ad-skip-button-modern";
-    button.textContent = "Skip ad";
-    button.style.cssText = "position:fixed;left:20px;top:80px;width:120px;height:40px;z-index:2147483647";
+    button.textContent = "Bỏ qua";
+    button.setAttribute("aria-label", "Bỏ qua");
+    button.style.cssText = "position:absolute;right:20px;bottom:40px;width:120px;height:40px;z-index:30";
     button.addEventListener("click", () => {
       globalThis.__ytfbAdSkipClicked = true;
+      globalThis.__ytfbOverlayDisplayAtSkip = getComputedStyle(overlay).display;
       player.classList.remove("ad-showing");
+      overlay.remove();
       button.remove();
     });
 
     player.classList.add("ad-showing");
-    player.append(button);
+    player.append(overlay, button);
 
     const marker = document.createElement("i");
     marker.id = "ytfb-audit-mutation";
@@ -187,6 +197,7 @@
       topbarVideoEnabled: document.documentElement.classList.contains("ytfb-topbar-video-enabled"),
       adShieldEnabled: document.documentElement.classList.contains("ytfb-ad-shield"),
       adSkipSimulated: Boolean(globalThis.__ytfbAdSkipClicked),
+      adOverlayDisplayAtSkip: globalThis.__ytfbOverlayDisplayAtSkip,
       playerStillAdShowing: document.querySelector("#movie_player")?.classList.contains("ad-showing") ?? null,
       selectors: selectors.map(inspect),
       adContainers: adSelectors.map((selector) => ({
@@ -215,7 +226,7 @@
   const masthead = value?.selectors?.find((item) => item.selector === "#masthead-container");
   if (!value?.active || !value?.topbarVideoEnabled || !value?.adShieldEnabled) process.exitCode = 2;
   if (topbar?.found || !masthead?.found || masthead.backgroundColor === undefined) process.exitCode = 3;
-  if (!value?.adSkipSimulated || value?.playerStillAdShowing) process.exitCode = 4;
+  if (!value?.adSkipSimulated || value?.playerStillAdShowing || value?.adOverlayDisplayAtSkip !== "none") process.exitCode = 4;
   if (!value?.adAccelerationActive?.muted || value.adAccelerationActive.rate < 8 ||
       value.adAccelerationActive.opacity !== "0" || !value.adAccelerationActive.adActiveClass) process.exitCode = 5;
   if (value?.adStatusActive &&

@@ -1,5 +1,9 @@
 # Performance notes
 
+## v1.6.1 ad-overlay patch cost
+
+The v1.6.1 fix is CSS selector matching plus bounded DOM control lookup only while Ad Shield is active. It adds no media decoder, no network stream, no canvas surface, and no per-frame graphics work. The player-localized Skip fallback is only used after a positive ad signal.
+
 Performance is a design constraint. The extension reuses YouTube's already-decoded player and does not fetch a second media URL.
 
 ## v1.6.0 single-surface architecture
