@@ -1,5 +1,9 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.2 Unicode ad-label hardening
+
+Localized Skip/Ad fallback matching now preserves Unicode letters instead of discarding non-Latin scripts. This restores Japanese matching lost during the v1.7.1 accent-fold rewrite and adds tested fallback labels for Korean, Russian, Simplified/Traditional Chinese, and Portuguese while preserving Vietnamese accent folding.
+
 ## v1.8.1 rule-count status fix
 
 The popup no longer assumes Ad Shield always has exactly seven network rules. The background now reports both the active rule count and the current packaged rule total, so the popup status stays accurate when rules are added or removed later.
