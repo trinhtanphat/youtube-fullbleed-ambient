@@ -6,14 +6,26 @@ const vm = require("node:vm");
 
 function bootWorker(
   initialSettings = { enabled: true, adBlock: true },
-  youtubeTabs = []
+  youtubeTabs = [],
+  initialStats = null
 ) {
   const dnrCalls = [];
   const reloads = [];
-  const listeners = { storageChanged: null, installed: null, startup: null, message: null };
+  const badges = [];
+  const localState = { ytfbBlockStats: initialStats };
+  const listeners = {
+    storageChanged: null,
+    installed: null,
+    startup: null,
+    message: null,
+    tabRemoved: null,
+    dnrMatch: null
+  };
+
   const root = path.resolve(__dirname, "..");
   const source = fs.readFileSync(path.join(root, "background.js"), "utf8");
   const R = require("../ad-rules.js");
+  const S = require("../block-stats.js");
 
   const runtime = {
     lastError: null,
@@ -30,9 +42,13 @@ function bootWorker(
     },
     clearTimeout() {},
     YTFBAdRules: null,
-    importScripts(file) {
-      assert.equal(file, "ad-rules.js");
-      context.YTFBAdRules = R;
+    YTFBBlockStats: null,
+    importScripts(...files) {
+      for (const file of files) {
+        if (file === "ad-rules.js") context.YTFBAdRules = R;
+        else if (file === "block-stats.js") context.YTFBBlockStats = S;
+        else throw new Error("unexpected importScripts file: " + file);
+      }
     },
     chrome: {
       declarativeNetRequest: {
@@ -42,6 +58,21 @@ function bootWorker(
         },
         getDynamicRules(callback) {
           callback(dnrCalls.at(-1)?.addRules || []);
+        },
+        onRuleMatchedDebug: {
+          addListener(fn) {
+            listeners.dnrMatch = fn;
+          }
+        }
+      },
+      action: {
+        setBadgeBackgroundColor(options, callback) {
+          badges.push({ type: "color", ...options });
+          callback?.();
+        },
+        setBadgeText(options, callback) {
+          badges.push({ type: "text", ...options });
+          callback?.();
         }
       },
       tabs: {
@@ -54,12 +85,26 @@ function bootWorker(
         },
         reload(tabId) {
           reloads.push(tabId);
+        },
+        onRemoved: {
+          addListener(fn) {
+            listeners.tabRemoved = fn;
+          }
         }
       },
       storage: {
         sync: {
           get(_defaults, callback) {
             callback({ ytfbSettings: initialSettings });
+          }
+        },
+        local: {
+          get(defaults, callback) {
+            callback({ ...defaults, ...localState });
+          },
+          set(values, callback) {
+            Object.assign(localState, values);
+            callback?.();
           }
         },
         onChanged: { addListener(fn) { listeners.storageChanged = fn; } }
@@ -70,7 +115,13 @@ function bootWorker(
   context.globalThis = context;
 
   vm.runInNewContext(source, context, { filename: "background.js" });
-  return { dnrCalls, reloads, listeners, R };
+  return { dnrCalls, reloads, badges, listeners, localState, R, S };
+}
+
+function send(listeners, message, sender = {}) {
+  let response = null;
+  const async = listeners.message(message, sender, (value) => { response = value; });
+  return { async, response };
 }
 
 test("background enables all network Ad Shield rules by default", () => {
@@ -101,12 +152,12 @@ test("background disables all network Ad Shield rules when master toggle is off"
   assert.equal(Array.from(dnrCalls.at(-1).addRules).length, 0);
 });
 
-test("install refreshes stale YouTube tabs but leaves current v1.6.1 tabs alone", () => {
+test("install refreshes stale YouTube tabs but leaves current v1.7.0 tabs alone", () => {
   const { listeners, reloads } = bootWorker(
     { enabled: true, adBlock: true },
     [
-      { id: 11, runtimeVersion: "1.5.0" },
-      { id: 12, runtimeVersion: "1.6.1" },
+      { id: 11, runtimeVersion: "1.6.1" },
+      { id: 12, runtimeVersion: "1.7.0" },
       { id: 13 }
     ]
   );
@@ -114,18 +165,56 @@ test("install refreshes stale YouTube tabs but leaves current v1.6.1 tabs alone"
   assert.deepEqual(reloads, [11, 13]);
 });
 
-test("Ad Shield status reports dynamic rules and static MAIN-world guard", () => {
+test("Ad Shield status reports dynamic rules, feedback counter, and static guard", () => {
   const { listeners, R } = bootWorker();
-  let response = null;
-  const async = listeners.message(
-    { type: "ytfb-ad-rules-status" },
-    {},
-    (value) => { response = value; }
-  );
+  const { async, response } = send(listeners, { type: "ytfb-ad-rules-status" });
   assert.equal(async, true);
   assert.equal(response.ok, true);
   assert.equal(response.enabled, true);
   assert.equal(response.ruleCount, R.AD_RULE_IDS.length);
   assert.equal(response.pageGuardStatic, true);
-  assert.equal(response.version, "1.6.1");
+  assert.equal(response.counterFeedback, true);
+  assert.equal(response.version, "1.7.0");
+});
+
+test("blocked counters combine exact network matches with page and player handling", () => {
+  const { listeners } = bootWorker();
+  listeners.dnrMatch({ rule: { ruleId: 1001 }, request: { tabId: 42 } });
+  send(listeners, { type: "ytfb-blocked-event", kind: "cosmetic", count: 3 }, { tab: { id: 42 } });
+  send(listeners, { type: "ytfb-blocked-event", kind: "player", count: 1 }, { tab: { id: 42 } });
+
+  const { async, response } = send(listeners, { type: "ytfb-block-stats", tabId: 42 });
+  assert.equal(async, true);
+  assert.equal(response.ok, true);
+  assert.equal(response.tabTotal, 5);
+  assert.equal(response.total, 5);
+  assert.deepEqual(
+    { ...response.tab },
+    { network: 1, cosmetic: 3, player: 1 }
+  );
+});
+
+test("closing a tab clears its per-tab counter but preserves lifetime totals", () => {
+  const { listeners } = bootWorker();
+  listeners.dnrMatch({ rule: { ruleId: 1001 }, request: { tabId: 7 } });
+  listeners.tabRemoved(7);
+
+  const { response } = send(listeners, { type: "ytfb-block-stats", tabId: 7 });
+  assert.equal(response.tabTotal, 0);
+  assert.equal(response.total, 1);
+});
+
+test("reset blocked counters clears totals and visible badges", () => {
+  const tabs = [{ id: 5 }, { id: 6 }];
+  const { listeners, badges } = bootWorker({ enabled: true, adBlock: true }, tabs);
+  listeners.dnrMatch({ rule: { ruleId: 1002 }, request: { tabId: 5 } });
+
+  const reset = send(listeners, { type: "ytfb-reset-block-stats" });
+  assert.equal(reset.async, true);
+  assert.equal(reset.response.ok, true);
+
+  const { response } = send(listeners, { type: "ytfb-block-stats", tabId: 5 });
+  assert.equal(response.total, 0);
+  assert.equal(response.tabTotal, 0);
+  assert.ok(badges.some((item) => item.type === "text" && item.tabId === 5 && item.text === ""));
 });

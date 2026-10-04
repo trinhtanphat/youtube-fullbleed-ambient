@@ -1,5 +1,9 @@
 # Performance notes
 
+## v1.7.0 counter overhead
+
+Block counters add no video decoder, canvas, or graphics work. Network counting is event-driven from DNR rule matches on unpacked builds. Cosmetic/player events are reported only when an ad container is removed or an in-player ad episode begins. Stats writes are batched with a short local-storage delay.
+
 ## v1.6.1 ad-overlay patch cost
 
 The v1.6.1 fix is CSS selector matching plus bounded DOM control lookup only while Ad Shield is active. It adds no media decoder, no network stream, no canvas surface, and no per-frame graphics work. The player-localized Skip fallback is only used after a positive ad signal.

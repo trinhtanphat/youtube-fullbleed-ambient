@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.6.1";
+  const RUNTIME_VERSION = "1.7.0";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -34,6 +34,7 @@
     adSkipClicks: 0,
     adAccelerations: 0,
     adSeeks: 0,
+    adEpisodeActive: false,
     adObserver: null,
     adObservedPlayer: null,
     watchModeObserver: null,
@@ -483,6 +484,18 @@
     ".video-ads.ytp-ad-module > *"
   ];
 
+  function reportBlocked(kind, count = 1) {
+    if (!state.settings.enabled || !state.settings.adBlock) return;
+    try {
+      chrome.runtime.sendMessage(
+        { type: "ytfb-blocked-event", kind, count },
+        () => void chrome.runtime.lastError
+      );
+    } catch {
+      // Extension context may be invalidated during an unpacked reload.
+    }
+  }
+
   const AD_REMOVE_SELECTORS = [
     "ytd-ad-slot-renderer",
     "ytd-in-feed-ad-layout-renderer",
@@ -497,9 +510,16 @@
   ];
 
   function removeCosmeticAds() {
+    let removed = 0;
     for (const selector of AD_REMOVE_SELECTORS) {
-      document.querySelectorAll(selector).forEach((element) => element.remove());
+      for (const element of document.querySelectorAll(selector)) {
+        if (!element.isConnected) continue;
+        element.remove();
+        removed += 1;
+      }
     }
+    if (removed) reportBlocked("cosmetic", removed);
+    return removed;
   }
 
   function trySkipPlayerApi(player) {
@@ -677,6 +697,7 @@
 
     if (!shieldEnabled) {
       html.classList.remove("ytfb-ad-active");
+      state.adEpisodeActive = false;
       restoreAdPlayback();
       return;
     }
@@ -688,8 +709,14 @@
     html.classList.toggle("ytfb-ad-active", adActive);
 
     if (!adActive) {
+      state.adEpisodeActive = false;
       restoreAdPlayback();
       return;
+    }
+
+    if (!state.adEpisodeActive) {
+      state.adEpisodeActive = true;
+      reportBlocked("player", 1);
     }
 
     clickFirstVisible(AD_CLOSE_SELECTORS);

@@ -9,7 +9,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
 
 test("manifest stays MV3 without a new scripting permission escalation", () => {
   assert.equal(manifest.manifest_version, 3);
-  assert.deepEqual(manifest.permissions, ["storage", "declarativeNetRequest"]);
+  assert.deepEqual(manifest.permissions, ["storage", "declarativeNetRequest", "declarativeNetRequestFeedback"]);
   assert.deepEqual(manifest.host_permissions, [
     "https://www.youtube.com/*",
     "*://*.doubleclick.net/*",
@@ -62,6 +62,7 @@ test("all packaged entry files exist", () => {
     for (const css of script.css || []) files.add(css);
   }
   files.add("ad-rules.js");
+  files.add("block-stats.js");
 
   for (const file of files) {
     assert.equal(fs.existsSync(path.join(root, file)), true, "missing packaged file: " + file);
@@ -72,6 +73,7 @@ test("runtime files contain no remote code or dynamic code execution", () => {
   const runtimeFiles = [
     "helpers.js",
     "ad-rules.js",
+    "block-stats.js",
     "ad-sanitize.js",
     "page-guard.js",
     "background.js",

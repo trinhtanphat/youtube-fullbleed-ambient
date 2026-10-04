@@ -21,12 +21,31 @@
   const blurValue = document.getElementById("blurValue");
   const status = document.getElementById("status");
   const liveDot = document.getElementById("liveDot");
+  const tabBlocked = document.getElementById("tabBlocked");
+  const totalBlocked = document.getElementById("totalBlocked");
+  const networkBlocked = document.getElementById("networkBlocked");
+  const cosmeticBlocked = document.getElementById("cosmeticBlocked");
+  const playerBlocked = document.getElementById("playerBlocked");
+  const counterMode = document.getElementById("counterMode");
   let saveTimer = null;
 
   function setStatus(message, tone = "idle") {
     status.textContent = message;
     liveDot.classList.toggle("active", tone === "active");
     liveDot.classList.toggle("warn", tone === "warn");
+  }
+
+  function formatCount(value) {
+    const n = Math.max(0, Number(value) || 0);
+    return new Intl.NumberFormat().format(n);
+  }
+
+  function renderBlockStats(stats) {
+    tabBlocked.textContent = formatCount(stats?.tabTotal);
+    totalBlocked.textContent = formatCount(stats?.total);
+    networkBlocked.textContent = formatCount(stats?.totals?.network);
+    cosmeticBlocked.textContent = formatCount(stats?.totals?.cosmetic);
+    playerBlocked.textContent = formatCount(stats?.totals?.player);
   }
 
   function render(settings) {
@@ -109,11 +128,36 @@
     });
   }
 
+  async function queryBlockStats(tabId) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "ytfb-block-stats", tabId }, (response) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(response?.ok ? response : null);
+      });
+    });
+  }
+
+  async function resetBlockStats() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "ytfb-reset-block-stats" }, (response) => {
+        if (chrome.runtime.lastError) resolve(false);
+        else resolve(Boolean(response?.ok));
+      });
+    });
+  }
+
   async function queryStatus() {
-    const [response, adRules] = await Promise.all([
-      sendToTab({ type: "ytfb-status" }),
-      queryAdRuleStatus()
+    const tab = await activeTab();
+    const [response, adRules, blockStats] = await Promise.all([
+      tab?.id ? sendToTab({ type: "ytfb-status" }) : Promise.resolve(null),
+      queryAdRuleStatus(),
+      queryBlockStats(tab?.id ?? -1)
     ]);
+
+    renderBlockStats(blockStats);
+    counterMode.textContent = adRules?.counterFeedback
+      ? "Exact network matches + page/player handling"
+      : "Page/player handling; network counter unavailable";
 
     if (!response?.ok) {
       setStatus("Open a YouTube watch page", "warn");
@@ -156,6 +200,16 @@
     const defaults = H.normalizeSettings(H.DEFAULT_SETTINGS);
     render(defaults);
     chrome.storage.sync.set({ ytfbSettings: defaults }, () => queryStatus());
+  });
+
+  document.getElementById("resetStats").addEventListener("click", async () => {
+    const ok = await resetBlockStats();
+    if (!ok) {
+      setStatus("Could not reset blocked counters", "warn");
+      return;
+    }
+    renderBlockStats(null);
+    queryStatus();
   });
 
   document.getElementById("toggleFocus").addEventListener("click", async () => {

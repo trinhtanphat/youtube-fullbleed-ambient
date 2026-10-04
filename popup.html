@@ -20,6 +20,32 @@
       </label>
     </header>
 
+    <section class="panel block-stats" aria-label="Ad Shield blocked counters">
+      <div class="stats-title-row">
+        <div>
+          <div class="section-title">Ad Shield</div>
+          <small id="counterMode">Counting network + page + player blocks</small>
+        </div>
+        <span class="shield-mark" aria-hidden="true">✓</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <strong id="tabBlocked">0</strong>
+          <span>Blocked on this tab</span>
+        </div>
+        <div class="stat-card">
+          <strong id="totalBlocked">0</strong>
+          <span>Total blocked</span>
+        </div>
+      </div>
+      <div class="stats-breakdown">
+        <span>Network <b id="networkBlocked">0</b></span>
+        <span>Page <b id="cosmeticBlocked">0</b></span>
+        <span>Player <b id="playerBlocked">0</b></span>
+      </div>
+      <button id="resetStats" type="button" class="secondary stats-reset">Reset counters</button>
+    </section>
+
     <section class="panel">
       <div class="section-title">Experience</div>
 
