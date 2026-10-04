@@ -41,10 +41,20 @@ test("2026 interactive player overlay is hidden without hiding the whole ad modu
   assert.doesNotMatch(css, /html\.ytfb-ad-shield \.video-ads\.ytp-ad-module\s*\{/);
 });
 
-test("localized skip controls include Vietnamese fallback", () => {
-  assert.match(js, /AD_SKIP_LABEL_RE/);
-  assert.match(js, /bỏ\\s\+qua/);
+test("localized skip controls use the tested accent-folding helper", () => {
+  assert.equal(js.includes("H.isAdSkipLabel(label)"), true);
   assert.match(js, /function clickLocalizedSkipControl/);
   assert.match(js, /function tryClickAdSkip/);
+  assert.doesNotMatch(js, /AD_SKIP_LABEL_RE/);
 });
 
+test("generic visible ytp-ad UI and localized labels are positive fallback signals", () => {
+  assert.equal(js.includes("[class*='ytp-ad-']"), true);
+  assert.equal(js.includes("H.isAdSignalText(label)"), true);
+  assert.equal(js.includes("H.isAdSkipLabel(label)"), true);
+  assert.doesNotMatch(js, /AD_SKIP_LABEL_RE/);
+});
+
+test("ad mutation cleanup uses the low-latency debounce", () => {
+  assert.equal(js.includes("function queueAdCleanup(delay = 12)"), true);
+});

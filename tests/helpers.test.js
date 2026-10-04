@@ -96,3 +96,19 @@ test("thumbnail URL", () => {
 test("megapixel load calculation", () => {
   assert.equal(H.megapixelsPerSecond(640, 360, 6), 1.382);
 });
+
+test("Vietnamese ad labels survive accent folding and match skip/ad signals", () => {
+  const skip = "B\u1ecf qua";
+  const full = "B\u1ecf qua qu\u1ea3ng c\u00e1o";
+  const sponsored = "\u0110\u01b0\u1ee3c t\u00e0i tr\u1ee3";
+  assert.equal(H.foldUiText(skip), "bo qua");
+  assert.equal(H.isAdSkipLabel(skip), true);
+  assert.equal(H.isAdSkipLabel(full), true);
+  assert.equal(H.isAdSignalText(sponsored), true);
+});
+
+test("ordinary player controls do not look like ads", () => {
+  assert.equal(H.isAdSkipLabel("Skip forward 10 seconds"), false);
+  assert.equal(H.isAdSignalText("Play"), false);
+  assert.equal(H.isAdSignalText("Settings"), false);
+});

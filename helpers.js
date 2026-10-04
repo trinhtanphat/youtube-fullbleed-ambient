@@ -32,6 +32,54 @@
     return Math.min(max, Math.max(min, n));
   }
 
+  function foldUiText(value) {
+    return String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\u0111/g, "d")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  const AD_SKIP_TEXTS = new Set([
+    "skip",
+    "skip ad",
+    "skip ads",
+    "bo qua",
+    "bo qua quang cao",
+    "omitir anuncio",
+    "saltar anuncio",
+    "ignorer l annonce",
+    "uberspringen",
+    "salta annuncio"
+  ]);
+
+  const AD_SIGNAL_TEXTS = Object.freeze([
+    "sponsored",
+    "duoc tai tro",
+    "quang cao",
+    "ads by google",
+    "why this ad",
+    "visit advertiser",
+    "ad 1 of",
+    "ad 2 of",
+    "ad 3 of"
+  ]);
+
+  function isAdSkipLabel(value) {
+    const text = foldUiText(value);
+    if (!text) return false;
+    return AD_SKIP_TEXTS.has(text) || /^skip ad \d+$/.test(text);
+  }
+
+  function isAdSignalText(value) {
+    const text = foldUiText(value);
+    if (!text) return false;
+    if (isAdSkipLabel(value)) return true;
+    return AD_SIGNAL_TEXTS.some((needle) => text === needle || text.includes(needle));
+  }
+
   function normalizeSettings(input) {
     const source = input && typeof input === "object" ? input : {};
     const fpsChoices = [2, 4, 6, 10];
@@ -137,6 +185,9 @@
     DEFAULT_SETTINGS,
     QUALITY_PIXELS,
     clamp,
+    foldUiText,
+    isAdSkipLabel,
+    isAdSignalText,
     normalizeSettings,
     computeCanvasSize,
     shouldDrawFrame,

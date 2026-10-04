@@ -1,5 +1,9 @@
 # Performance notes
 
+## v1.7.1 ad-detection hotfix
+
+The hotfix adds no media or canvas work. It only broadens positive ad-state detection inside the existing player subtree and reduces the mutation cleanup debounce from 50 ms to 12 ms.
+
 ## v1.7.0 counter overhead
 
 Block counters add no video decoder, canvas, or graphics work. Network counting is event-driven from DNR rule matches on unpacked builds. Cosmetic/player events are reported only when an ad container is removed or an in-player ad episode begins. Stats writes are batched with a short local-storage delay.
