@@ -313,7 +313,7 @@ const path = require("node:path");
   console.log(JSON.stringify(result, null, 2));
 
   if (!initial.active || initial.docked || !initial.glass || !initial.normalMode || initial.theaterMode ||
-      !Array.isArray(initial.topbarCanvas) || initial.topbarCanvas[0] !== 480 || initial.topbarCanvas[1] !== 36 ||
+      !Array.isArray(initial.topbarCanvas) || initial.topbarCanvas[0] !== 640 || initial.topbarCanvas[1] !== 64 ||
       initial.topbarPointerEvents !== "none" || Number(initial.topbarOpacity) < 0.9) process.exitCode = 2;
   if (!initial.logoAccent || initial.logoHref !== "/" || initial.logoPointerEvents === "none") process.exitCode = 3;
   if (initial.mastheadBorder !== "1px") process.exitCode = 4;
