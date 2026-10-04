@@ -35,7 +35,8 @@
   function foldUiText(value) {
     return String(value ?? "")
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+      .normalize("NFC")
       .toLowerCase()
       .replace(/\u0111/g, "d")
       .replace(/[^\p{L}\p{N}]+/gu, " ")
