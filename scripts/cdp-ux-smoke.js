@@ -1,4 +1,4 @@
-﻿const fs = require("node:fs");
+const fs = require("node:fs");
 const path = require("node:path");
 
 (async () => {
@@ -138,6 +138,33 @@ const path = require("node:path");
       mastheadBackground: mastheadStyle?.backgroundColor || null
     };
   })())`));
+
+  const liveFrames = JSON.parse(await evaluate(`(async () => {
+    const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
+    if (!video) return JSON.stringify({ video: false });
+
+    const previousMuted = video.muted;
+    video.muted = true;
+    try {
+      await video.play();
+    } catch {
+      return JSON.stringify({ video: true, played: false });
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    let status = null;
+    globalThis.__ytfbRuntimeListener?.({ type: "ytfb-status" }, null, (response) => { status = response; });
+    video.muted = previousMuted;
+
+    return JSON.stringify({
+      video: true,
+      played: !video.paused,
+      ambientFrame: Boolean(status?.ambientFrame),
+      drawing: Boolean(status?.drawing),
+      videoReady: Boolean(status?.videoReady),
+      topbarFrameAgeMs: status?.topbarFrameAgeMs ?? null
+    });
+  })()`));
 
   await evaluate(`(() => {
     const nativeLogo = document.querySelector("ytd-masthead#masthead ytd-topbar-logo-renderer");
@@ -301,6 +328,7 @@ const path = require("node:path");
 
   const result = {
     initial,
+    liveFrames,
     fallbackWhenNativeHidden,
     nativeRestored,
     theaterMode,
@@ -315,6 +343,9 @@ const path = require("node:path");
   if (!initial.active || initial.docked || !initial.glass || !initial.normalMode || initial.theaterMode ||
       !Array.isArray(initial.topbarCanvas) || initial.topbarCanvas[0] !== 640 || initial.topbarCanvas[1] !== 64 ||
       initial.topbarPointerEvents !== "none" || Number(initial.topbarOpacity) < 0.9) process.exitCode = 2;
+  if (!liveFrames.video || !liveFrames.played || !liveFrames.ambientFrame ||
+      !liveFrames.drawing || !liveFrames.videoReady ||
+      !Number.isFinite(liveFrames.topbarFrameAgeMs) || liveFrames.topbarFrameAgeMs > 1200) process.exitCode = 13;
   if (!initial.logoAccent || initial.logoHref !== "/" || initial.logoPointerEvents === "none") process.exitCode = 3;
   if (initial.mastheadBorder !== "1px") process.exitCode = 4;
   if (fallbackWhenNativeHidden.exists && (!fallbackWhenNativeHidden.visible || fallbackWhenNativeHidden.label !== "YouTube Home")) process.exitCode = 5;
