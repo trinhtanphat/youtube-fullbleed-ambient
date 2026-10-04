@@ -39,3 +39,9 @@ test("packaged runtime contains no browser-bridge injection code", () => {
     assert.doesNotMatch(source, /BRIDGE_URL|unsupported browser bridge command|new\s+WebSocket\s*\(/i, file);
   }
 });
+
+
+test("popup uses the dynamic Ad Shield rule total instead of a hard-coded denominator", () => {
+  assert.match(js, /adRules\.ruleTotal/);
+  assert.doesNotMatch(js, /Ad Shield \$\{adRules\.ruleCount \|\| 0\}\/7/);
+});
