@@ -37,9 +37,14 @@
       const url = new URL(String(urlLike || ""), "https://www.youtube.com/");
       const host = url.hostname.replace(/^www\./, "");
       if (host !== "youtube.com" && host !== "m.youtube.com") return false;
-      return url.pathname === "/youtubei/v1/player" ||
-        url.pathname === "/youtubei/v1/player/" ||
-        url.pathname === "/get_video_info";
+
+      const path = url.pathname;
+      return path === "/youtubei/v1/player" ||
+        path === "/youtubei/v1/player/" ||
+        path === "/get_video_info" ||
+        path === "/playlist" ||
+        path === "/watch" ||
+        path === "/get_watch";
     } catch {
       return false;
     }
@@ -90,10 +95,22 @@
     }
   }
 
+  function sanitizeArrayBuffer(buffer, urlLike) {
+    if (!shouldSanitizeResponseUrl(urlLike) || !(buffer instanceof ArrayBuffer)) return buffer;
+    try {
+      const text = new TextDecoder().decode(buffer);
+      const clean = sanitizeJsonText(text, urlLike);
+      return clean === text ? buffer : new TextEncoder().encode(clean).buffer;
+    } catch {
+      return buffer;
+    }
+  }
+
   return {
     AD_KEYS,
     shouldSanitizeResponseUrl,
     sanitizePlayerResponse,
-    sanitizeJsonText
+    sanitizeJsonText,
+    sanitizeArrayBuffer
   };
 });
