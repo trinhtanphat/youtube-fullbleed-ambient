@@ -1,8 +1,8 @@
-﻿const H = require("../helpers.js");
+const H = require("../helpers.js");
 
 const source = { width: 3840, height: 2160 };
 const softness = H.DEFAULT_SETTINGS.blur;
-const topbar = { width: 480, height: 36, fps: 2 };
+const topbar = { width: 640, height: 64, fps: 4 };
 const topbarMpps = H.megapixelsPerSecond(topbar.width, topbar.height, topbar.fps);
 
 console.log(`softness=${softness} (dynamic downsample, no per-frame Gaussian blur)`);

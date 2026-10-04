@@ -116,6 +116,8 @@ const path = require("node:path");
     const canvas = document.querySelector("#ytfb-root canvas");
     const topbar = document.querySelector("#ytfb-topbar-video");
     const topbarStyle = topbar ? getComputedStyle(topbar) : null;
+    const topbarRelay = document.querySelector("#ytfb-topbar-relay");
+    const topbarRelayStyle = topbarRelay ? getComputedStyle(topbarRelay) : null;
     return {
       active: document.documentElement.classList.contains("ytfb-active"),
       docked: document.documentElement.classList.contains("ytfb-docked"),
@@ -128,6 +130,9 @@ const path = require("node:path");
       topbarPointerEvents: topbarStyle?.pointerEvents || null,
       topbarOpacity: topbarStyle?.opacity || null,
       topbarHost: topbar?.parentElement?.id || topbar?.parentElement?.tagName || null,
+      topbarRelayConnected: Boolean(topbarRelay?.isConnected),
+      topbarRelayOpacity: topbarRelayStyle?.opacity || null,
+      topbarRelayPointerEvents: topbarRelayStyle?.pointerEvents || null,
       nativeLogoVisible: Boolean(nativeLogo && logoRect.width >= 40 && logoRect.height >= 20),
       logoAccent: Boolean(nativeLogo?.classList.contains("ytfb-logo-anchor")),
       logoHref: logoLink?.getAttribute("href") || null,
@@ -342,7 +347,9 @@ const path = require("node:path");
 
   if (!initial.active || initial.docked || !initial.glass || !initial.normalMode || initial.theaterMode ||
       !Array.isArray(initial.topbarCanvas) || initial.topbarCanvas[0] !== 640 || initial.topbarCanvas[1] !== 64 ||
-      initial.topbarPointerEvents !== "none" || Number(initial.topbarOpacity) < 0.9) process.exitCode = 2;
+      initial.topbarPointerEvents !== "none" ||
+      !(Number(initial.topbarOpacity) >= 0.9 ||
+        (initial.topbarRelayConnected && Number(initial.topbarRelayOpacity) >= 0.9 && initial.topbarRelayPointerEvents === "none"))) process.exitCode = 2;
   if (!liveFrames.video || !liveFrames.played || !liveFrames.ambientFrame ||
       !liveFrames.drawing || !liveFrames.videoReady ||
       !Number.isFinite(liveFrames.topbarFrameAgeMs) || liveFrames.topbarFrameAgeMs > 1200) process.exitCode = 13;

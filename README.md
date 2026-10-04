@@ -1,8 +1,18 @@
-﻿# YouTube Fullbleed Ambient
+# YouTube Fullbleed Ambient
 
 A lightweight Chrome/Edge Manifest V3 extension that reuses YouTube's existing player to create a full-page ambient background, a live-video masthead, scroll docking, focus fill, and a best-effort Ad Shield. It does not create a second video stream or decoder.
 
-Version 1.5 adds explicit support for YouTube normal and Theater layouts, a stronger live-video topbar, and a multi-layer Ad Shield with a packaged MAIN-world player-response guard.
+Version 1.5.2 adds explicit support for YouTube normal and Theater layouts, a stronger live-video topbar, and a multi-layer Ad Shield with a packaged MAIN-world player-response guard.
+
+## v1.5.2 captureStream relay
+
+Chrome can advance the YouTube media clock while a canvas `drawImage(video, ...)` sample remains frozen on some GPU/renderer paths. v1.5.2 therefore prefers `HTMLVideoElement.captureStream()`: one captured MediaStream from the existing YouTube player feeds a muted full-page relay video and a muted masthead relay video. They use `srcObject`, never a second URL, so there is no second YouTube download or decoder. The previous low-resolution canvas + poster pipeline remains as the compatibility fallback.
+
+The relay is cleaned up when YouTube replaces the source media element, navigation leaves a watch page, or the extension is disabled. A heartbeat checks relay progress and falls back/recreates it if the captured stream stalls.
+
+## v1.5.1 refresh watchdog
+
+The live-frame pipeline now keeps a low-frequency timer watchdog running alongside `requestVideoFrameCallback`, plus a 500 ms heartbeat that restarts the renderer if YouTube strands both scheduled draw paths during a player transition. This fixes cases where the video clock keeps advancing while the ambient canvas or masthead stops refreshing. Drawing is still bounded by the configured FPS, so this does not create a second decoder or an unbounded animation loop.
 
 ## v1.5 live-frame fix
 

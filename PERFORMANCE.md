@@ -1,5 +1,15 @@
 # Performance notes
 
+## v1.5.2 relay architecture
+
+The preferred live path is now a captured MediaStream from the already-decoded YouTube video. The same stream is assigned with `srcObject` to the full-page ambient relay and masthead relay. This adds compositing surfaces, but no duplicate media URL, network transfer, or second decode pipeline. When the relay is live, the canvas copy path is skipped; the bounded canvas renderer remains available only as fallback.
+
+
+
+## v1.5.1 refresh watchdog
+
+The renderer now keeps the configured-FPS timer as a watchdog even when `requestVideoFrameCallback` is available, plus a 500 ms heartbeat that only restarts or force-refreshes a stranded renderer. Both frame paths still call the same throttled draw function, so duplicate callbacks do not double the canvas copy rate. The heartbeat adds negligible scheduling work and is suspended while the document is hidden.
+
 Performance is a design constraint. The extension reuses YouTube's existing video element and never starts a second network stream or video decoder.
 
 ## v1.5 frame scheduling
@@ -22,7 +32,7 @@ The default is **Medium / 4 FPS / Softness 42**, about **0.527 MP/s** of ambient
 
 ## v1.5 live-video topbar
 
-The masthead effect adds a second canvas surface, but not a second media element or decoder. Its internal surface is **640x64** and is sampled at about **2 FPS** by piggybacking on the ambient render loop:
+The masthead effect adds a second canvas surface, but not a second media element or decoder. Its internal surface is **640x64 @ ~4 FPS** by piggybacking on the ambient render loop:
 
 **480 x 36 x 2 = 0.035 MP/s**
 
