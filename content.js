@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.7.1";
+  const RUNTIME_VERSION = "1.8.0";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -35,6 +35,7 @@
     adAccelerations: 0,
     adSeeks: 0,
     adEpisodeActive: false,
+    adLastSeenAt: 0,
     adObserver: null,
     adObservedPlayer: null,
     watchModeObserver: null,
@@ -409,6 +410,8 @@
     state.video.removeEventListener("loadeddata", onVideoReady);
     state.video.removeEventListener("canplay", onVideoReady);
     state.video.removeEventListener("seeked", onVideoReady);
+    state.video.removeEventListener("loadstart", onPotentialAdMediaStateChange);
+    state.video.removeEventListener("durationchange", onPotentialAdMediaStateChange);
     state.video = null;
   }
 
@@ -438,6 +441,8 @@
     video.addEventListener("loadeddata", onVideoReady, { passive: true });
     video.addEventListener("canplay", onVideoReady, { passive: true });
     video.addEventListener("seeked", onVideoReady, { passive: true });
+    video.addEventListener("loadstart", onPotentialAdMediaStateChange, { passive: true });
+    video.addEventListener("durationchange", onPotentialAdMediaStateChange, { passive: true });
 
     onVideoReady();
   }
@@ -445,6 +450,12 @@
   function findAndAttachVideo() {
     const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
     if (video && video !== state.video) attachVideo(video);
+  }
+
+  const AD_END_GRACE_MS = 420;
+
+  function onPotentialAdMediaStateChange() {
+    if (state.settings.enabled && state.settings.adBlock) queueAdCleanup(0);
   }
 
   const AD_SKIP_SELECTORS = [
@@ -481,6 +492,10 @@
     ".ytp-ad-message-container",
     ".ytp-ad-preview-text",
     ".ytp-ad-persistent-progress-bar-container",
+    ".ytp-ad-progress-list",
+    ".ytp-ad-pod-index",
+    ".ytp-ad-survey",
+    ".ytp-ad-player-overlay-layout",
     ".video-ads.ytp-ad-module > *"
   ];
 
@@ -506,7 +521,9 @@
     "ytd-player-legacy-desktop-watch-ads-renderer",
     "ytd-search-pyv-renderer",
     "ytd-rich-item-renderer:has(ytd-ad-slot-renderer)",
-    "ytd-rich-section-renderer:has(ytd-ad-slot-renderer)"
+    "ytd-rich-section-renderer:has(ytd-ad-slot-renderer)",
+    "ytd-reel-video-renderer:has(ytd-ad-slot-renderer)",
+    "ytd-engagement-panel-section-list-renderer[target-id*='ads']"
   ];
 
   function removeCosmeticAds() {
@@ -597,8 +614,8 @@
     return hasVisibleAdUi(player);
   }
 
-  function restoreAdPlayback() {
-    document.documentElement.classList.remove("ytfb-ad-active");
+  function restoreAdPlayback(keepShield = false) {
+    if (!keepShield) document.documentElement.classList.remove("ytfb-ad-active");
     if (state.adTimer !== null) {
       clearTimeout(state.adTimer);
       state.adTimer = null;
@@ -625,14 +642,23 @@
     }
 
     if (!playerReportsAd()) {
-      restoreAdPlayback();
+      const keepShield = H.shouldKeepAdEpisode(
+        state.adEpisodeActive,
+        state.adLastSeenAt,
+        performance.now(),
+        AD_END_GRACE_MS
+      );
+      restoreAdPlayback(keepShield);
+      if (keepShield) queueAdCleanup(60);
       return;
     }
 
+    state.adLastSeenAt = performance.now();
     const player = document.querySelector("#movie_player");
     const video = state.adRestore.video;
     if (!video?.isConnected) {
-      restoreAdPlayback();
+      restoreAdPlayback(true);
+      queueAdCleanup(0);
       return;
     }
 
@@ -716,6 +742,7 @@
     if (!shieldEnabled) {
       html.classList.remove("ytfb-ad-active");
       state.adEpisodeActive = false;
+      state.adLastSeenAt = 0;
       restoreAdPlayback();
       return;
     }
@@ -723,14 +750,30 @@
     removeCosmeticAds();
 
     const player = document.querySelector("#movie_player");
+    const now = performance.now();
     const adActive = playerReportsAd();
-    html.classList.toggle("ytfb-ad-active", adActive);
 
     if (!adActive) {
+      const keepShield = H.shouldKeepAdEpisode(
+        state.adEpisodeActive,
+        state.adLastSeenAt,
+        now,
+        AD_END_GRACE_MS
+      );
+      html.classList.toggle("ytfb-ad-active", keepShield);
+      if (keepShield) {
+        restoreAdPlayback(true);
+        queueAdCleanup(60);
+        return;
+      }
       state.adEpisodeActive = false;
+      state.adLastSeenAt = 0;
       restoreAdPlayback();
       return;
     }
+
+    state.adLastSeenAt = now;
+    html.classList.add("ytfb-ad-active");
 
     if (!state.adEpisodeActive) {
       state.adEpisodeActive = true;
@@ -810,8 +853,9 @@
     state.adObserver ||= new MutationObserver(() => queueAdCleanup());
     state.adObserver.observe(player, {
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: ["class", "style", "hidden", "aria-hidden", "aria-label", "title"],
       childList: true,
+      characterData: true,
       subtree: true
     });
     state.adObservedPlayer = player;
