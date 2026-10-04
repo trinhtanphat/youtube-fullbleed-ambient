@@ -1,5 +1,9 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.1 rule-count status fix
+
+The popup no longer assumes Ad Shield always has exactly seven network rules. The background now reports both the active rule count and the current packaged rule total, so the popup status stays accurate when rules are added or removed later.
+
 ## v1.8.0 response-path hardening
 
 Ad Shield now sanitizes YouTube playback ad payloads across more response paths before they can become visible UI. The MAIN-world guard covers both `ytInitialPlayerResponse` and `playerResponse`, handles `fetch`, `Response.json()`, `Response.text()`, and `Response.arrayBuffer()`, and recognizes player/watch/playlist playback endpoints. Existing DOM skip/seek/16x fallbacks remain in place for server-side or experimental variants that cannot be removed safely at the response layer.
