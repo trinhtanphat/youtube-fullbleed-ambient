@@ -127,5 +127,5 @@ test("Ad Shield status reports dynamic rules and static MAIN-world guard", () =>
   assert.equal(response.enabled, true);
   assert.equal(response.ruleCount, R.AD_RULE_IDS.length);
   assert.equal(response.pageGuardStatic, true);
-  assert.equal(response.version, "1.4.0");
+  assert.equal(response.version, "1.5.0");
 });
