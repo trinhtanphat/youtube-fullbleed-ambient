@@ -152,12 +152,12 @@ test("background disables all network Ad Shield rules when master toggle is off"
   assert.equal(Array.from(dnrCalls.at(-1).addRules).length, 0);
 });
 
-test("install refreshes stale YouTube tabs but leaves current v1.8.0 tabs alone", () => {
+test("install refreshes stale YouTube tabs but leaves current v1.8.1 tabs alone", () => {
   const { listeners, reloads } = bootWorker(
     { enabled: true, adBlock: true },
     [
       { id: 11, runtimeVersion: "1.6.1" },
-      { id: 12, runtimeVersion: "1.8.0" },
+      { id: 12, runtimeVersion: "1.8.1" },
       { id: 13 }
     ]
   );
@@ -172,9 +172,10 @@ test("Ad Shield status reports dynamic rules, feedback counter, and static guard
   assert.equal(response.ok, true);
   assert.equal(response.enabled, true);
   assert.equal(response.ruleCount, R.AD_RULE_IDS.length);
+  assert.equal(response.ruleTotal, R.AD_RULE_IDS.length);
   assert.equal(response.pageGuardStatic, true);
   assert.equal(response.counterFeedback, true);
-  assert.equal(response.version, "1.8.0");
+  assert.equal(response.version, "1.8.1");
 });
 
 test("blocked counters combine exact network matches with page and player handling", () => {
