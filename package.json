@@ -1,8 +1,8 @@
 {
   "name": "youtube-fullbleed-ambient",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
-  "description": "Chrome/Edge extension for YouTube ambient backgrounds across normal/theater modes, live topbar, scroll docking, and multi-layer Ad Shield.",
+  "description": "Chrome/Edge extension for YouTube decoded-frame ambient backgrounds across normal/theater modes, live topbar, scroll docking, and multi-layer Ad Shield.",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "check": "node --check helpers.js && node --check ad-rules.js && node --check ad-sanitize.js && node --check page-guard.js && node --check background.js && node --check content.js && node --check popup.js && node --check scripts/perf-model.js && node --check scripts/cdp-smoke.js && node --check scripts/cdp-inject.js && node --check scripts/cdp-ux-smoke.js && node --check scripts/cdp-play.js && node --check scripts/cdp-dom-audit.js",
