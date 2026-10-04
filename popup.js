@@ -175,7 +175,7 @@
     if (response.relayLive) parts.push("relay live");
     if (response.unifiedHeader || response.topbarVideo) parts.push("unified header");
     if (response.adBlock) {
-      parts.push(adRules?.enabled ? `Ad Shield ${adRules.ruleCount || 0}/7` : "Ad Shield UI only");
+      parts.push(adRules?.enabled ? `Ad Shield ${adRules.ruleCount || 0}/${adRules.ruleTotal || adRules.ruleCount || 0}` : "Ad Shield UI only");
     }
     if (response.canvas?.width) parts.push(response.canvas.width + "x" + response.canvas.height);
     if (response.version) parts.push("v" + response.version);
