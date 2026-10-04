@@ -16,6 +16,7 @@ html.ytfb-active #ytfb-root { opacity: 0.94; }
 html.ytfb-active.ytfb-reading #ytfb-root { opacity: 0.68; }
 
 #ytfb-root .ytfb-fallback,
+#ytfb-root .ytfb-relay,
 #ytfb-root canvas {
   position: absolute;
   inset: -8%;
@@ -26,10 +27,25 @@ html.ytfb-active.ytfb-reading #ytfb-root { opacity: 0.68; }
   will-change: transform, opacity;
 }
 
-#ytfb-root canvas {
+#ytfb-root canvas,
+#ytfb-root .ytfb-relay {
   filter:
     brightness(var(--ytfb-brightness))
     saturate(1.25);
+}
+
+#ytfb-root .ytfb-relay {
+  opacity: 0;
+  background: #050505;
+}
+
+html.ytfb-relay-live #ytfb-root .ytfb-relay {
+  opacity: 1;
+}
+
+html.ytfb-relay-live #ytfb-root canvas,
+html.ytfb-relay-live #ytfb-root .ytfb-fallback {
+  opacity: 0 !important;
 }
 
 #ytfb-root .ytfb-fallback {
@@ -103,7 +119,8 @@ html.ytfb-active.ytfb-topbar-video-enabled #masthead-container {
   ) !important;
 }
 
-#ytfb-topbar-video {
+#ytfb-topbar-video,
+#ytfb-topbar-relay {
   position: absolute;
   inset: -6px -2%;
   z-index: 0;
@@ -115,6 +132,18 @@ html.ytfb-active.ytfb-topbar-video-enabled #masthead-container {
   transform: scale(1.02);
   image-rendering: auto;
   filter: blur(5px) brightness(.84) saturate(1.50) contrast(1.12);
+}
+
+#ytfb-topbar-relay {
+  opacity: 0;
+}
+
+html.ytfb-topbar-relay-live #ytfb-topbar-relay {
+  opacity: 1;
+}
+
+html.ytfb-topbar-relay-live #ytfb-topbar-video {
+  opacity: 0;
 }
 
 html.ytfb-active ytd-masthead#masthead {

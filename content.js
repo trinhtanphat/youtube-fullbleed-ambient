@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.5.0";
+  const RUNTIME_VERSION = "1.5.2";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -12,6 +12,14 @@
     canvas: null,
     ctx: null,
     fallback: null,
+    relayVideo: null,
+    relayStream: null,
+    relaySource: null,
+    relayLive: false,
+    lastRelayTime: 0,
+    lastRelayProgressAt: 0,
+    topbarRelay: null,
+    topbarRelayLive: false,
     video: null,
     brandLogo: null,
     topbarCanvas: null,
@@ -19,6 +27,7 @@
     lastTopbarDraw: 0,
     hasAmbientFrame: false,
     videoFrameCallbackId: null,
+    renderWatchdogId: null,
     adRestore: null,
     adTimer: null,
     adCleanupTimer: null,
@@ -55,15 +64,25 @@
     fallback.className = "ytfb-fallback";
     fallback.alt = "";
 
+    const relay = document.createElement("video");
+    relay.className = "ytfb-relay";
+    relay.muted = true;
+    relay.autoplay = true;
+    relay.playsInline = true;
+    relay.disablePictureInPicture = true;
+    relay.setAttribute("aria-hidden", "true");
+    relay.setAttribute("tabindex", "-1");
+
     const canvas = document.createElement("canvas");
     const shade = document.createElement("div");
     shade.className = "ytfb-shade";
 
-    root.append(fallback, canvas, shade);
+    root.append(fallback, relay, canvas, shade);
     (document.body || document.documentElement).prepend(root);
 
     state.root = root;
     state.fallback = fallback;
+    state.relayVideo = relay;
     state.canvas = canvas;
     state.ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
     root.classList.add("ytfb-awaiting-frame");
@@ -80,7 +99,20 @@
       state.topbarCanvas.style.backgroundPosition = "center";
     }
     state.root.classList.toggle("ytfb-static", state.drawFailed);
-    state.root.classList.toggle("ytfb-awaiting-frame", !state.hasAmbientFrame && !state.drawFailed);
+    state.root.classList.toggle("ytfb-awaiting-frame", !state.relayLive && !state.hasAmbientFrame && !state.drawFailed);
+  }
+
+  function clearTopbarRelay() {
+    if (state.topbarRelay) {
+      try {
+        state.topbarRelay.pause();
+        state.topbarRelay.srcObject = null;
+      } catch {}
+      state.topbarRelay.remove();
+    }
+    state.topbarRelay = null;
+    state.topbarRelayLive = false;
+    document.documentElement.classList.remove("ytfb-topbar-relay-live");
   }
 
   function clearTopbarVideoSurface() {
@@ -88,6 +120,7 @@
     state.topbarCanvas = null;
     state.topbarCtx = null;
     state.lastTopbarDraw = 0;
+    clearTopbarRelay();
     document.documentElement.classList.remove("ytfb-topbar-video-enabled");
   }
 
@@ -124,6 +157,139 @@
     state.topbarCtx = canvas.getContext("2d", { alpha: true, desynchronized: true });
     state.lastTopbarDraw = 0;
     return canvas;
+  }
+
+  function ensureTopbarRelay() {
+    if (!state.active || !state.settings.topbarVideo || !state.relayStream) {
+      clearTopbarRelay();
+      return null;
+    }
+
+    const host = getTopbarHost();
+    if (!host) return null;
+    if (
+      state.topbarRelay?.isConnected &&
+      state.topbarRelay.parentElement === host &&
+      state.topbarRelay.srcObject === state.relayStream
+    ) {
+      return state.topbarRelay;
+    }
+
+    clearTopbarRelay();
+    const relay = document.createElement("video");
+    relay.id = "ytfb-topbar-relay";
+    relay.muted = true;
+    relay.autoplay = true;
+    relay.playsInline = true;
+    relay.disablePictureInPicture = true;
+    relay.setAttribute("aria-hidden", "true");
+    relay.setAttribute("tabindex", "-1");
+    relay.srcObject = state.relayStream;
+    relay.addEventListener("playing", () => {
+      if (relay !== state.topbarRelay) return;
+      state.topbarRelayLive = true;
+      document.documentElement.classList.add("ytfb-topbar-relay-live");
+    }, { passive: true });
+    relay.addEventListener("error", () => {
+      if (relay !== state.topbarRelay) return;
+      state.topbarRelayLive = false;
+      document.documentElement.classList.remove("ytfb-topbar-relay-live");
+    }, { passive: true });
+    host.prepend(relay);
+    state.topbarRelay = relay;
+    relay.play().catch(() => {});
+    return relay;
+  }
+
+  function setRelayLive(next) {
+    state.relayLive = Boolean(next);
+    document.documentElement.classList.toggle("ytfb-relay-live", state.relayLive);
+    if (state.relayLive) {
+      state.lastRelayTime = state.relayVideo?.currentTime || 0;
+      state.lastRelayProgressAt = performance.now();
+      state.root?.classList.remove("ytfb-static", "ytfb-awaiting-frame");
+      ensureTopbarRelay();
+    }
+  }
+
+  function clearRelay() {
+    clearTopbarRelay();
+    setRelayLive(false);
+
+    if (state.relayVideo) {
+      try {
+        state.relayVideo.pause();
+        state.relayVideo.srcObject = null;
+      } catch {}
+    }
+
+    if (state.relayStream) {
+      for (const track of state.relayStream.getTracks()) {
+        try { track.stop(); } catch {}
+      }
+    }
+
+    state.relayStream = null;
+    state.relaySource = null;
+    state.lastRelayTime = 0;
+    state.lastRelayProgressAt = 0;
+  }
+
+  function syncRelay(video = state.video) {
+    if (!state.active || !state.settings.enabled || !video) {
+      clearRelay();
+      return false;
+    }
+
+    if (
+      state.relaySource === video &&
+      state.relayStream &&
+      state.relayVideo?.srcObject === state.relayStream
+    ) {
+      ensureTopbarRelay();
+      return state.relayLive;
+    }
+
+    clearRelay();
+    const capture = typeof video.captureStream === "function"
+      ? video.captureStream.bind(video)
+      : null;
+    if (!capture) return false;
+
+    let stream;
+    try {
+      stream = capture();
+    } catch {
+      return false;
+    }
+
+    if (!stream?.getVideoTracks?.().length) {
+      try { stream?.getTracks?.().forEach((track) => track.stop()); } catch {}
+      return false;
+    }
+
+    const relay = state.relayVideo || ensureRoot().querySelector(".ytfb-relay");
+    if (!relay) return false;
+
+    state.relayStream = stream;
+    state.relaySource = video;
+    relay.srcObject = stream;
+
+    const markPlaying = () => {
+      if (relay !== state.relayVideo || state.relayStream !== stream) return;
+      setRelayLive(true);
+    };
+    relay.addEventListener("playing", markPlaying, { once: true, passive: true });
+    relay.addEventListener("loadeddata", markPlaying, { once: true, passive: true });
+    relay.addEventListener("error", () => {
+      if (state.relayStream !== stream) return;
+      clearRelay();
+      if (state.active && !document.hidden) scheduleRender();
+    }, { once: true, passive: true });
+
+    ensureTopbarRelay();
+    relay.play().then(markPlaying).catch(() => {});
+    return true;
   }
 
   function drawTopbarFrame(video, now, force = false) {
@@ -248,6 +414,11 @@
       return;
     }
 
+    if (state.relayLive && state.relaySource === video) {
+      ensureTopbarRelay();
+      return;
+    }
+
     const now = performance.now();
     drawAmbientFrame(video, now, force);
     // Keep this independent from the ambient draw so a transient failure in
@@ -264,27 +435,81 @@
     }
 
     const video = state.video;
+    const interval = Math.max(100, Math.round(1000 / state.settings.fps));
     renderCurrentFrame(true);
 
-    if (typeof video.requestVideoFrameCallback === "function") {
-      const tick = () => {
-        state.videoFrameCallbackId = null;
-        if (state.video !== video || !isPlayingRenderable()) return;
-        renderCurrentFrame(false);
-        state.videoFrameCallbackId = video.requestVideoFrameCallback(tick);
-      };
-      state.videoFrameCallbackId = video.requestVideoFrameCallback(tick);
-      return;
-    }
-
-    const interval = Math.max(100, Math.round(1000 / state.settings.fps));
-    const tick = () => {
+    // Always keep a timer watchdog alive. requestVideoFrameCallback is ideal
+    // when Chromium continues delivering decoded-frame callbacks, but YouTube
+    // renderer/visibility transitions can occasionally strand that callback.
+    // The watchdog guarantees the ambient page and masthead keep refreshing.
+    const timerTick = () => {
       state.timerId = null;
       if (state.video !== video || !isPlayingRenderable()) return;
       renderCurrentFrame(false);
-      state.timerId = setTimeout(tick, interval);
+      state.timerId = setTimeout(timerTick, interval);
     };
-    state.timerId = setTimeout(tick, interval);
+    state.timerId = setTimeout(timerTick, interval);
+
+    if (typeof video.requestVideoFrameCallback === "function") {
+      const frameTick = () => {
+        state.videoFrameCallbackId = null;
+        if (state.video !== video || !isPlayingRenderable()) return;
+        renderCurrentFrame(false);
+        state.videoFrameCallbackId = video.requestVideoFrameCallback(frameTick);
+      };
+      state.videoFrameCallbackId = video.requestVideoFrameCallback(frameTick);
+    }
+  }
+
+  function stopRenderWatchdog() {
+    if (state.renderWatchdogId !== null) {
+      clearInterval(state.renderWatchdogId);
+      state.renderWatchdogId = null;
+    }
+  }
+
+  function ensureRenderWatchdog() {
+    if (state.renderWatchdogId !== null || !state.active || document.hidden) return;
+
+    state.renderWatchdogId = setInterval(() => {
+      if (!state.active || !state.settings.enabled || document.hidden) return;
+
+      const current = document.querySelector("video.html5-main-video") || document.querySelector("video");
+      if (current && current !== state.video) attachVideo(current);
+
+      if (!isPlayingRenderable()) return;
+
+      if (state.relayLive && state.relaySource === state.video) {
+        const relayTime = state.relayVideo?.currentTime || 0;
+        if (relayTime > state.lastRelayTime + 0.02) {
+          state.lastRelayTime = relayTime;
+          state.lastRelayProgressAt = performance.now();
+          ensureTopbarRelay();
+          return;
+        }
+
+        if (performance.now() - state.lastRelayProgressAt > 1600) {
+          clearRelay();
+          syncRelay(state.video);
+          if (!state.relayLive) scheduleRender();
+        }
+        return;
+      }
+
+      const interval = Math.max(100, Math.round(1000 / state.settings.fps));
+      const staleFor = state.lastDraw > 0 ? performance.now() - state.lastDraw : Infinity;
+
+      if (state.timerId === null && state.videoFrameCallbackId === null) {
+        scheduleRender();
+        return;
+      }
+
+      // Last-resort refresh if Chromium reports the media as playing but a
+      // renderer transition has stranded both scheduled draw paths.
+      if (staleFor > Math.max(750, interval * 3)) {
+        renderCurrentFrame(true);
+      }
+    }, 500);
   }
 
   function onVideoReady() {
@@ -299,6 +524,7 @@
 
   function detachVideo() {
     cancelRenderLoop();
+    clearRelay();
     if (!state.video) return;
     state.video.removeEventListener("play", scheduleRender);
     state.video.removeEventListener("playing", scheduleRender);
@@ -314,8 +540,9 @@
   function attachVideo(video) {
     if (!video) return;
     if (state.video === video) {
+      syncRelay(video);
       renderCurrentFrame(true);
-      if (!video.paused && !video.ended) scheduleRender();
+      if (!video.paused && !video.ended && !state.relayLive) scheduleRender();
       return;
     }
 
@@ -326,6 +553,7 @@
     state.hasAmbientFrame = false;
     state.drawFailed = false;
     ensureRoot().classList.add("ytfb-awaiting-frame");
+    syncRelay(video);
 
     video.addEventListener("play", scheduleRender, { passive: true });
     video.addEventListener("playing", scheduleRender, { passive: true });
@@ -573,6 +801,7 @@
     }
 
     ensureTopbarVideoSurface();
+    ensureTopbarRelay();
     const masthead = document.querySelector("ytd-masthead#masthead");
     if (!masthead) return;
 
@@ -753,24 +982,26 @@
     setFallback();
     document.documentElement.classList.add("ytfb-active");
     startObserver();
+    ensureRenderWatchdog();
     syncWatchModeObserver();
     findAndAttachVideo();
     syncTopbarBrand();
     syncAdObserver();
     cleanupAds();
-    if (state.video) renderCurrentFrame(true);
+    if (state.video) { syncRelay(state.video); renderCurrentFrame(true); }
 
     if (applyStartupMode) applyFocusPreference();
     else if (state.settings.mode !== "focus" && state.focus) exitFocus();
 
     setDocked(state.docked);
     queueScrollPresentation();
-    if (state.video && !state.video.paused) scheduleRender();
+    if (state.video && !state.video.paused && !state.relayLive) scheduleRender();
   }
 
   function deactivate() {
     state.active = false;
     stopObserver();
+    stopRenderWatchdog();
     stopWatchModeObserver();
     cancelRenderLoop();
     detachVideo();
@@ -783,6 +1014,8 @@
       "ytfb-reading",
       "ytfb-comment-glass",
       "ytfb-topbar-video-enabled",
+      "ytfb-relay-live",
+      "ytfb-topbar-relay-live",
       "ytfb-theater",
       "ytfb-normal",
       "ytfb-dock-small",
@@ -820,12 +1053,12 @@
     syncTopbarBrand();
     syncAdObserver();
     cleanupAds();
-    if (state.video) renderCurrentFrame(true);
+    if (state.video) { syncRelay(state.video); renderCurrentFrame(true); }
     if (state.settings.mode !== "focus" && state.focus) exitFocus();
     setDocked(state.docked);
     findAndAttachVideo();
     queueScrollPresentation();
-    if (state.video && !state.video.paused) scheduleRender();
+    if (state.video && !state.video.paused && !state.relayLive) scheduleRender();
   }
 
   function onNavigation() {
@@ -845,9 +1078,12 @@
       const logoNeedsSync = !state.brandLogo?.isConnected ||
         !state.brandLogo.closest("ytd-masthead#masthead") ||
         document.getElementById("ytfb-brand-fallback");
+      const topbarHost = getTopbarHost();
       const topbarNeedsSync = state.settings.topbarVideo &&
         (!state.topbarCanvas?.isConnected ||
-          state.topbarCanvas.parentElement !== getTopbarHost());
+          state.topbarCanvas.parentElement !== topbarHost ||
+          (state.relayStream &&
+            (!state.topbarRelay?.isConnected || state.topbarRelay.parentElement !== topbarHost)));
       if (logoNeedsSync || topbarNeedsSync) syncTopbarBrand();
       if (state.observedFlexy !== document.querySelector("ytd-watch-flexy")) syncWatchModeObserver();
       if (state.adObservedPlayer !== document.querySelector("#movie_player")) syncAdObserver();
@@ -856,14 +1092,20 @@
   }
 
   function onVisibility() {
-    if (document.hidden) cancelRenderLoop();
-    else if (state.active) {
+    if (document.hidden) {
+      cancelRenderLoop();
+      stopRenderWatchdog();
+    } else if (state.active) {
+      ensureRenderWatchdog();
       findAndAttachVideo();
       syncWatchModeObserver();
       syncAdObserver();
       cleanupAds();
-      if (state.video) renderCurrentFrame(true);
-      scheduleRender();
+      if (state.video) {
+        syncRelay(state.video);
+        renderCurrentFrame(true);
+      }
+      if (!state.relayLive) scheduleRender();
       queueScrollPresentation();
     }
   }
@@ -943,12 +1185,23 @@
           focus: state.focus,
           docked: state.docked,
           reading: document.documentElement.classList.contains("ytfb-reading"),
-          drawing: Boolean(state.timerId !== null || state.videoFrameCallbackId !== null),
-          ambientFrame: state.hasAmbientFrame,
+          drawing: Boolean(state.relayLive || state.timerId !== null || state.videoFrameCallbackId !== null),
+          ambientFrame: Boolean(state.relayLive || state.hasAmbientFrame),
+          ambientFrameAgeMs: state.relayLive
+            ? 0
+            : (state.lastDraw > 0 ? Math.round(performance.now() - state.lastDraw) : null),
+          relayLive: state.relayLive,
+          relayTime: state.relayVideo?.currentTime ?? null,
+          relayTracks: state.relayStream?.getVideoTracks?.().length || 0,
+          topbarRelayLive: state.topbarRelayLive,
+          topbarRelayTime: state.topbarRelay?.currentTime ?? null,
+          renderTimerActive: state.timerId !== null,
+          videoFrameCallbackActive: state.videoFrameCallbackId !== null,
+          renderWatchdogActive: state.renderWatchdogId !== null,
           canvas: state.canvas ? { width: state.canvas.width, height: state.canvas.height } : null,
-          topbarVideo: Boolean(state.topbarCanvas?.isConnected && state.settings.topbarVideo),
+          topbarVideo: Boolean((state.topbarRelay?.isConnected || state.topbarCanvas?.isConnected) && state.settings.topbarVideo),
           topbarHost: state.topbarCanvas?.parentElement?.id || state.topbarCanvas?.parentElement?.tagName || null,
-          topbarFrameAgeMs: state.lastTopbarDraw > 0 ? Math.round(performance.now() - state.lastTopbarDraw) : null,
+          topbarFrameAgeMs: state.topbarRelayLive ? 0 : (state.lastTopbarDraw > 0 ? Math.round(performance.now() - state.lastTopbarDraw) : null),
           videoReady: Boolean(state.video?.readyState >= 2 && state.video?.videoWidth > 0),
           videoPaused: state.video ? state.video.paused : null,
           watchMode: state.watchMode,
