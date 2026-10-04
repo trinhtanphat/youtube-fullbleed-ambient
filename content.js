@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.4.0";
+  const RUNTIME_VERSION = "1.5.0";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -17,6 +17,8 @@
     topbarCanvas: null,
     topbarCtx: null,
     lastTopbarDraw: 0,
+    hasAmbientFrame: false,
+    videoFrameCallbackId: null,
     adRestore: null,
     adTimer: null,
     adCleanupTimer: null,
@@ -64,6 +66,7 @@
     state.fallback = fallback;
     state.canvas = canvas;
     state.ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    root.classList.add("ytfb-awaiting-frame");
     return root;
   }
 
@@ -77,6 +80,7 @@
       state.topbarCanvas.style.backgroundPosition = "center";
     }
     state.root.classList.toggle("ytfb-static", state.drawFailed);
+    state.root.classList.toggle("ytfb-awaiting-frame", !state.hasAmbientFrame && !state.drawFailed);
   }
 
   function clearTopbarVideoSurface() {
@@ -107,8 +111,8 @@
     state.topbarCanvas?.remove();
     const canvas = document.createElement("canvas");
     canvas.id = "ytfb-topbar-video";
-    canvas.width = 480;
-    canvas.height = 36;
+    canvas.width = 640;
+    canvas.height = 64;
     canvas.setAttribute("aria-hidden", "true");
     const poster = H.getThumbnailUrl(location.href);
     canvas.style.backgroundImage = poster ? `url("${poster}")` : "";
@@ -124,7 +128,7 @@
 
   function drawTopbarFrame(video, now, force = false) {
     if (!state.settings.topbarVideo || !video || video.readyState < 2) return;
-    if (!force && now - state.lastTopbarDraw < 300) return;
+    if (!force && now - state.lastTopbarDraw < 240) return;
 
     const canvas = ensureTopbarVideoSurface();
     const ctx = state.topbarCtx;
@@ -169,15 +173,21 @@
     html.classList.add("ytfb-dock-" + state.settings.dockSize);
   }
 
-  function isRenderable() {
+  function canSampleVideo(video = state.video) {
     return state.active &&
       state.settings.enabled &&
       H.isEligibleYouTubeUrl(location.href) &&
       !document.hidden &&
-      state.video &&
+      Boolean(video) &&
+      video.readyState >= 2 &&
+      video.videoWidth > 0 &&
+      video.videoHeight > 0;
+  }
+
+  function isPlayingRenderable() {
+    return canSampleVideo(state.video) &&
       !state.video.paused &&
-      !state.video.ended &&
-      state.video.readyState >= 2;
+      !state.video.ended;
   }
 
   function cancelRenderLoop() {
@@ -185,12 +195,24 @@
       clearTimeout(state.timerId);
       state.timerId = null;
     }
+    if (
+      state.videoFrameCallbackId !== null &&
+      state.video &&
+      typeof state.video.cancelVideoFrameCallback === "function"
+    ) {
+      try {
+        state.video.cancelVideoFrameCallback(state.videoFrameCallbackId);
+      } catch {
+        // The media element may have been replaced by YouTube.
+      }
+    }
+    state.videoFrameCallbackId = null;
   }
 
-  function drawFrame(now) {
-    if (!isRenderable() || !H.shouldDrawFrame(now, state.lastDraw, state.settings.fps)) return;
+  function drawAmbientFrame(video, now, force = false) {
+    if (!canSampleVideo(video)) return false;
+    if (!force && !H.shouldDrawFrame(now, state.lastDraw, state.settings.fps)) return false;
 
-    const video = state.video;
     const size = H.computeCanvasSize(
       video.videoWidth,
       video.videoHeight,
@@ -205,53 +227,116 @@
     try {
       state.ctx.filter = "none";
       state.ctx.drawImage(video, 0, 0, state.canvas.width, state.canvas.height);
-      drawTopbarFrame(video, now);
       state.lastDraw = now;
-      if (state.drawFailed) {
-        state.drawFailed = false;
-        state.root.classList.remove("ytfb-static");
-      }
+      state.hasAmbientFrame = true;
+      state.drawFailed = false;
+      state.root.classList.remove("ytfb-static", "ytfb-awaiting-frame");
+      return true;
     } catch {
-      state.drawFailed = true;
-      setFallback();
+      if (!state.hasAmbientFrame) {
+        state.drawFailed = true;
+        setFallback();
+      }
+      return false;
     }
+  }
+
+  function renderCurrentFrame(force = false) {
+    const video = state.video;
+    if (!canSampleVideo(video)) {
+      setFallback();
+      return;
+    }
+
+    const now = performance.now();
+    drawAmbientFrame(video, now, force);
+    // Keep this independent from the ambient draw so a transient failure in
+    // one surface never freezes the other.
+    drawTopbarFrame(video, now, force);
   }
 
   function scheduleRender() {
     cancelRenderLoop();
-    if (!isRenderable()) return;
+
+    if (!isPlayingRenderable()) {
+      renderCurrentFrame(true);
+      return;
+    }
+
+    const video = state.video;
+    renderCurrentFrame(true);
+
+    if (typeof video.requestVideoFrameCallback === "function") {
+      const tick = () => {
+        state.videoFrameCallbackId = null;
+        if (state.video !== video || !isPlayingRenderable()) return;
+        renderCurrentFrame(false);
+        state.videoFrameCallbackId = video.requestVideoFrameCallback(tick);
+      };
+      state.videoFrameCallbackId = video.requestVideoFrameCallback(tick);
+      return;
+    }
 
     const interval = Math.max(100, Math.round(1000 / state.settings.fps));
     const tick = () => {
       state.timerId = null;
-      if (!isRenderable()) return;
-      drawFrame(performance.now());
+      if (state.video !== video || !isPlayingRenderable()) return;
+      renderCurrentFrame(false);
       state.timerId = setTimeout(tick, interval);
     };
-    state.timerId = setTimeout(tick, 0);
+    state.timerId = setTimeout(tick, interval);
+  }
+
+  function onVideoReady() {
+    renderCurrentFrame(true);
+    if (state.video && !state.video.paused && !state.video.ended) scheduleRender();
+  }
+
+  function onVideoPauseOrEnd() {
+    cancelRenderLoop();
+    renderCurrentFrame(true);
   }
 
   function detachVideo() {
     cancelRenderLoop();
     if (!state.video) return;
     state.video.removeEventListener("play", scheduleRender);
-    state.video.removeEventListener("pause", cancelRenderLoop);
-    state.video.removeEventListener("ended", cancelRenderLoop);
-    state.video.removeEventListener("loadedmetadata", scheduleRender);
+    state.video.removeEventListener("playing", scheduleRender);
+    state.video.removeEventListener("pause", onVideoPauseOrEnd);
+    state.video.removeEventListener("ended", onVideoPauseOrEnd);
+    state.video.removeEventListener("loadedmetadata", onVideoReady);
+    state.video.removeEventListener("loadeddata", onVideoReady);
+    state.video.removeEventListener("canplay", onVideoReady);
+    state.video.removeEventListener("seeked", onVideoReady);
     state.video = null;
   }
 
   function attachVideo(video) {
-    if (!video || state.video === video) return;
+    if (!video) return;
+    if (state.video === video) {
+      renderCurrentFrame(true);
+      if (!video.paused && !video.ended) scheduleRender();
+      return;
+    }
+
     detachVideo();
     state.video = video;
     state.lastDraw = 0;
+    state.lastTopbarDraw = 0;
+    state.hasAmbientFrame = false;
     state.drawFailed = false;
+    ensureRoot().classList.add("ytfb-awaiting-frame");
+
     video.addEventListener("play", scheduleRender, { passive: true });
-    video.addEventListener("pause", cancelRenderLoop, { passive: true });
-    video.addEventListener("ended", cancelRenderLoop, { passive: true });
-    video.addEventListener("loadedmetadata", scheduleRender, { passive: true });
-    if (!video.paused) scheduleRender();
+    video.addEventListener("playing", scheduleRender, { passive: true });
+    video.addEventListener("pause", onVideoPauseOrEnd, { passive: true });
+    video.addEventListener("ended", onVideoPauseOrEnd, { passive: true });
+    video.addEventListener("loadedmetadata", onVideoReady, { passive: true });
+    video.addEventListener("loadeddata", onVideoReady, { passive: true });
+    video.addEventListener("canplay", onVideoReady, { passive: true });
+    video.addEventListener("seeked", onVideoReady, { passive: true });
+
+    onVideoReady();
   }
 
   function findAndAttachVideo() {
@@ -673,7 +758,7 @@
     syncTopbarBrand();
     syncAdObserver();
     cleanupAds();
-    if (state.video) drawTopbarFrame(state.video, performance.now(), true);
+    if (state.video) renderCurrentFrame(true);
 
     if (applyStartupMode) applyFocusPreference();
     else if (state.settings.mode !== "focus" && state.focus) exitFocus();
@@ -704,7 +789,9 @@
       "ytfb-dock-medium",
       "ytfb-dock-large"
     );
-    if (state.root) state.root.classList.remove("ytfb-static");
+    state.hasAmbientFrame = false;
+    state.drawFailed = false;
+    if (state.root) state.root.classList.remove("ytfb-static", "ytfb-awaiting-frame");
     syncAdObserver();
     cleanupAds();
   }
@@ -721,6 +808,9 @@
 
     if (!state.active || urlChanged) {
       setDocked(false);
+      state.hasAmbientFrame = false;
+      state.drawFailed = false;
+      ensureRoot().classList.add("ytfb-awaiting-frame");
       activate(applyStartupMode);
       return;
     }
@@ -730,7 +820,7 @@
     syncTopbarBrand();
     syncAdObserver();
     cleanupAds();
-    if (state.video) drawTopbarFrame(state.video, performance.now(), true);
+    if (state.video) renderCurrentFrame(true);
     if (state.settings.mode !== "focus" && state.focus) exitFocus();
     setDocked(state.docked);
     findAndAttachVideo();
@@ -772,7 +862,7 @@
       syncWatchModeObserver();
       syncAdObserver();
       cleanupAds();
-      if (state.video) drawTopbarFrame(state.video, performance.now(), true);
+      if (state.video) renderCurrentFrame(true);
       scheduleRender();
       queueScrollPresentation();
     }
@@ -853,10 +943,14 @@
           focus: state.focus,
           docked: state.docked,
           reading: document.documentElement.classList.contains("ytfb-reading"),
-          drawing: Boolean(state.timerId !== null),
+          drawing: Boolean(state.timerId !== null || state.videoFrameCallbackId !== null),
+          ambientFrame: state.hasAmbientFrame,
           canvas: state.canvas ? { width: state.canvas.width, height: state.canvas.height } : null,
           topbarVideo: Boolean(state.topbarCanvas?.isConnected && state.settings.topbarVideo),
           topbarHost: state.topbarCanvas?.parentElement?.id || state.topbarCanvas?.parentElement?.tagName || null,
+          topbarFrameAgeMs: state.lastTopbarDraw > 0 ? Math.round(performance.now() - state.lastTopbarDraw) : null,
+          videoReady: Boolean(state.video?.readyState >= 2 && state.video?.videoWidth > 0),
+          videoPaused: state.video ? state.video.paused : null,
           watchMode: state.watchMode,
           adBlock: Boolean(state.settings.adBlock),
           adSkips: state.adSkipClicks,

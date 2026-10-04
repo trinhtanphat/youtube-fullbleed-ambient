@@ -2,6 +2,10 @@
 
 Performance is a design constraint. The extension reuses YouTube's existing video element and never starts a second network stream or video decoder.
 
+## v1.5 frame scheduling
+
+When available, `requestVideoFrameCallback` drives the ambient and masthead sampling from actual decoded video frames. Rendering remains throttled by the configured ambient FPS. A timer fallback is used on browsers without that API. This avoids stale canvases while keeping the same low-resolution sampling model.
+
 ## Pixel budget
 
 The main ambient layer downsamples the playing video into a bounded canvas. Softness lowers the dynamic canvas resolution instead of applying a full-resolution per-frame Gaussian blur.
@@ -16,9 +20,9 @@ At the default Softness value (42), a 4K source is reduced to:
 
 The default is **Medium / 4 FPS / Softness 42**, about **0.527 MP/s** of ambient-canvas copies.
 
-## v1.4 live-video topbar
+## v1.5 live-video topbar
 
-The masthead effect adds a second canvas surface, but not a second media element or decoder. Its internal surface is **480x36** and is sampled at about **2 FPS** by piggybacking on the ambient render loop:
+The masthead effect adds a second canvas surface, but not a second media element or decoder. Its internal surface is **640x64** and is sampled at about **2 FPS** by piggybacking on the ambient render loop:
 
 **480 x 36 x 2 = 0.035 MP/s**
 
@@ -26,7 +30,7 @@ That modeled copy workload is about 6.6% of the default ambient canvas copy work
 
 Normal mode and Theater mode use the same surfaces. The extension observes YouTube's watch-layout attributes and changes transparency/anchoring rather than creating another player.
 
-## v1.4 Ad Shield runtime behavior
+## v1.5 Ad Shield runtime behavior
 
 Network blocking is handled by scoped Manifest V3 declarative rules and adds no per-frame rendering work. A packaged MAIN-world guard removes a bounded set of known ad-related fields from YouTube player responses. Cosmetic hiding is ordinary CSS.
 
@@ -41,7 +45,7 @@ The runtime smoke/audit checks:
 - ambient activation in normal mode;
 - native Theater mode transition and return to normal;
 - transparent full-bleed/theater backgrounds while ambient is active;
-- live topbar canvas remains connected at 480x36;
+- live topbar canvas remains connected at 640x64;
 - topbar pointer events are disabled;
 - native masthead controls remain interactive;
 - cosmetic ad containers are hidden;
@@ -68,7 +72,7 @@ A later masthead pass measured:
 | YouTube baseline after reload | 0.259% | 8.28% | 1037.7 MB | 551.3 MB |
 | Ambient + static/hover logo treatment | 2.285% | 73.12% | 1347.3 MB | 555.3 MB |
 
-These runs predate the final v1.4 topbar dimensions and are retained only as historical VM observations. YouTube playback, decoding, caching, source resolution, browser version, and the virtual graphics stack produce large variance.
+These runs predate the final v1.5 topbar dimensions and are retained only as historical VM observations. YouTube playback, decoding, caching, source resolution, browser version, and the virtual graphics stack produce large variance.
 
 ### Earlier memory stability check
 
@@ -89,7 +93,7 @@ A trustworthy extension-only VRAM delta is not available from the 181 VMware gra
 
 - one existing YouTube decoder;
 - one bounded ambient canvas;
-- one small 480x36 topbar canvas;
+- one small 640x64 topbar canvas;
 - no second video stream;
 - no full-resolution copy surface;
 - no per-frame full-resolution Gaussian blur;
