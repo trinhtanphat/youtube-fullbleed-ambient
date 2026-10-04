@@ -80,6 +80,17 @@
     return AD_SIGNAL_TEXTS.some((needle) => text === needle || text.includes(needle));
   }
 
+  function shouldKeepAdEpisode(active, lastSeenAt, now, graceMs = 420) {
+    const last = Number(lastSeenAt);
+    const current = Number(now);
+    const grace = Number(graceMs);
+    return Boolean(active) &&
+      Number.isFinite(last) && last > 0 &&
+      Number.isFinite(current) && current >= last &&
+      Number.isFinite(grace) && grace > 0 &&
+      current - last < grace;
+  }
+
   function normalizeSettings(input) {
     const source = input && typeof input === "object" ? input : {};
     const fpsChoices = [2, 4, 6, 10];
@@ -188,6 +199,7 @@
     foldUiText,
     isAdSkipLabel,
     isAdSignalText,
+    shouldKeepAdEpisode,
     normalizeSettings,
     computeCanvasSize,
     shouldDrawFrame,
