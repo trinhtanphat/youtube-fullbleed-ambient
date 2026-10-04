@@ -4,7 +4,7 @@ importScripts("ad-rules.js", "block-stats.js");
 
 const R = globalThis.YTFBAdRules;
 const S = globalThis.YTFBBlockStats;
-const RUNTIME_VERSION = "1.8.0";
+const RUNTIME_VERSION = "1.8.1";
 const DEFAULT_SETTINGS = Object.freeze({ enabled: true, adBlock: true });
 const STATS_KEY = "ytfbBlockStats";
 
@@ -157,6 +157,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ok: true,
         enabled: R.AD_RULE_IDS.every((id) => activeIds.has(id)),
         ruleCount: R.AD_RULE_IDS.filter((id) => activeIds.has(id)).length,
+        ruleTotal: R.AD_RULE_IDS.length,
         pageGuardStatic: true,
         counterFeedback: Boolean(chrome.declarativeNetRequest.onRuleMatchedDebug),
         version: RUNTIME_VERSION
