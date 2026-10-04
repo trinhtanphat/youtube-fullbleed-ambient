@@ -1,5 +1,17 @@
 # YouTube Fullbleed Ambient
 
+## v1.7.0 AdGuard-style counters
+
+The popup now shows **Blocked on this tab**, **Total blocked**, and a breakdown for **Network / Page / Player** handling. For unpacked development installs, the network count uses Chromium's `declarativeNetRequestFeedback` event so the counter reflects actual matches of this extension's DNR rules. Page counts track removed sponsored/ad containers and Player counts track one positively detected in-player ad episode.
+
+A compact badge on the extension icon mirrors the current tab count (up to `999+`). Counters live in local extension storage and can be reset from the popup.
+
+This remains a YouTube-focused blocker rather than a full general-purpose filter engine like AdGuard. It deliberately avoids broad media-host rules that could break normal YouTube playback.
+
+## Edge error-page note
+
+The package contains no `BRIDGE_URL`, browser-bridge command handler, or WebSocket bridge. If Edge's extension error page shows an anonymous script containing those names, that source came from an injected browser-control bridge rather than this extension package. Reloading the unpacked extension clears the stale runtime context; v1.7.0 also includes a regression test so bridge code cannot accidentally enter the package.
+
 ## v1.6.1 interactive-ad overlay fix
 
 This patch targets the newer full-player interactive/sponsored card layout seen in 2026 YouTube experiments. Ad Shield now hides `.ytp-ad-player-overlay` and the newer `.ytp-ad-player-overlay-layout__ad-info-container` visual card without hiding the whole `.ytp-ad-module` (which would also hide the Skip control).
