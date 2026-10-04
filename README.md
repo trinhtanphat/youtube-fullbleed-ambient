@@ -2,7 +2,11 @@
 
 A lightweight Chrome/Edge Manifest V3 extension that reuses YouTube's existing player to create a full-page ambient background, a live-video masthead, scroll docking, focus fill, and a best-effort Ad Shield. It does not create a second video stream or decoder.
 
-Version 1.4 adds explicit support for YouTube normal and Theater layouts, a stronger live-video topbar, and a multi-layer Ad Shield with a packaged MAIN-world player-response guard.
+Version 1.5 adds explicit support for YouTube normal and Theater layouts, a stronger live-video topbar, and a multi-layer Ad Shield with a packaged MAIN-world player-response guard.
+
+## v1.5 live-frame fix
+
+The ambient page and masthead now sample decoded YouTube video frames directly with `requestVideoFrameCallback` when the browser supports it, with a timer fallback otherwise. A poster/thumbnail remains visible until the first real frame arrives, so paused/autoplay-blocked pages no longer look blank. Normal and Theater mode share the same frame pipeline.
 
 ## Experience
 
@@ -12,13 +16,13 @@ The current video is sampled into a bounded low-resolution canvas and stretched 
 
 ### Live-video topbar
 
-The masthead receives a separate **480x36** canvas sampled from the currently playing video at roughly **2 FPS**. CSS enlarges, blurs, darkens, and saturates that tiny surface behind YouTube's real topbar controls.
+The masthead receives a separate **640x64** canvas sampled from the currently playing video at roughly **2 FPS**. CSS enlarges, blurs, darkens, and saturates that tiny surface behind YouTube's real topbar controls.
 
 The topbar canvas has pointer events disabled. The real YouTube logo, search box, account controls, and other masthead controls stay above it and remain clickable. This is a visual sample of the existing video, not another media element or decoder.
 
 ### Normal and Theater modes
 
-Version 1.4 observes YouTube's native watch-layout attributes. Switching between normal mode and Theater mode updates the ambient layout without replacing YouTube's player. Full-bleed/theater containers become transparent only while ambient mode is active, and the live-video topbar stays attached through the transition.
+Version 1.5 observes YouTube's native watch-layout attributes. Switching between normal mode and Theater mode updates the ambient layout without replacing YouTube's player. Full-bleed/theater containers become transparent only while ambient mode is active, and the live-video topbar stays attached through the transition.
 
 ### YouTube logo
 
@@ -51,7 +55,7 @@ Focus Fill expands the real YouTube player to the browser viewport. Press **Esc*
 
 - Reuses YouTube's existing video element: no duplicate stream or decoder.
 - Default ambient canvas is approximately **484x272** at Softness 42 and 4 FPS.
-- Live-video topbar is **480x36 at about 2 FPS**, roughly **0.035 MP/s** of extra canvas copying.
+- Live-video topbar is **640x64 at about 2 FPS**, roughly **0.035 MP/s** of extra canvas copying.
 - Softness is implemented mainly through downsampling instead of a full-resolution per-frame Gaussian blur.
 - Topbar sampling piggybacks on the ambient render loop instead of adding another continuous animation loop.
 - Rendering stops when hidden, paused, ended, disabled, or off a valid watch page.
