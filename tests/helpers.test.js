@@ -112,3 +112,27 @@ test("ordinary player controls do not look like ads", () => {
   assert.equal(H.isAdSignalText("Play"), false);
   assert.equal(H.isAdSignalText("Settings"), false);
 });
+
+
+test("non-Latin YouTube ad labels survive Unicode folding", () => {
+  for (const label of [
+    "広告をスキップ",
+    "광고 건너뛰기",
+    "Пропустить рекламу",
+    "跳过广告",
+    "跳過廣告"
+  ]) {
+    assert.notEqual(H.foldUiText(label), "");
+    assert.equal(H.isAdSkipLabel(label), true, label);
+  }
+
+  for (const label of ["広告", "광고", "Реклама", "广告", "廣告"]) {
+    assert.equal(H.isAdSignalText(label), true, label);
+  }
+});
+
+test("Latin accent folding still supports Vietnamese and Portuguese", () => {
+  assert.equal(H.foldUiText("Được tài trợ"), "duoc tai tro");
+  assert.equal(H.foldUiText("Pular anúncio"), "pular anuncio");
+  assert.equal(H.isAdSkipLabel("Pular anúncio"), true);
+});
