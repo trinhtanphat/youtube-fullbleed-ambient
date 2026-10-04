@@ -12,8 +12,8 @@
   contain: strict;
 }
 
-html.ytfb-active #ytfb-root { opacity: 0.88; }
-html.ytfb-active.ytfb-reading #ytfb-root { opacity: 0.56; }
+html.ytfb-active #ytfb-root { opacity: 0.94; }
+html.ytfb-active.ytfb-reading #ytfb-root { opacity: 0.68; }
 
 #ytfb-root .ytfb-fallback,
 #ytfb-root canvas {
@@ -37,22 +37,25 @@ html.ytfb-active.ytfb-reading #ytfb-root { opacity: 0.56; }
   filter: blur(var(--ytfb-blur)) brightness(var(--ytfb-brightness)) saturate(1.25);
 }
 
-#ytfb-root.ytfb-static .ytfb-fallback { opacity: 1; }
-#ytfb-root.ytfb-static canvas { opacity: 0; }
+#ytfb-root.ytfb-static .ytfb-fallback,
+#ytfb-root.ytfb-awaiting-frame .ytfb-fallback { opacity: 1; }
+
+#ytfb-root.ytfb-static canvas,
+#ytfb-root.ytfb-awaiting-frame canvas { opacity: 0; }
 
 #ytfb-root .ytfb-shade {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 50% 18%, transparent 0 24%, rgba(0,0,0,.16) 58%, rgba(0,0,0,.58) 100%),
-    linear-gradient(to bottom, rgba(0,0,0,.05), rgba(0,0,0,.34));
+    radial-gradient(circle at 50% 18%, transparent 0 30%, rgba(0,0,0,.10) 62%, rgba(0,0,0,.42) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,.02), rgba(0,0,0,.22));
   transition: background 220ms ease;
 }
 
 html.ytfb-reading #ytfb-root .ytfb-shade {
   background:
-    radial-gradient(circle at 50% 12%, transparent 0 20%, rgba(0,0,0,.24) 55%, rgba(0,0,0,.68) 100%),
-    linear-gradient(to bottom, rgba(0,0,0,.18), rgba(0,0,0,.46));
+    radial-gradient(circle at 50% 12%, transparent 0 24%, rgba(0,0,0,.18) 58%, rgba(0,0,0,.54) 100%),
+    linear-gradient(to bottom, rgba(0,0,0,.10), rgba(0,0,0,.34));
 }
 
 html.ytfb-active,
@@ -95,22 +98,23 @@ html.ytfb-active #masthead-container {
 html.ytfb-active.ytfb-topbar-video-enabled #masthead-container {
   background: color-mix(
     in srgb,
-    var(--yt-spec-base-background, #0f0f0f) 14%,
+    var(--yt-spec-base-background, #0f0f0f) 7%,
     transparent
   ) !important;
 }
 
 #ytfb-topbar-video {
   position: absolute;
-  inset: -10px -3%;
+  inset: -6px -2%;
   z-index: 0;
-  width: 106%;
-  height: calc(100% + 20px);
+  width: 104%;
+  height: calc(100% + 12px);
   pointer-events: none;
   object-fit: cover;
   opacity: 1;
-  transform: scale(1.04);
-  filter: blur(9px) brightness(.70) saturate(1.58) contrast(1.08);
+  transform: scale(1.02);
+  image-rendering: auto;
+  filter: blur(5px) brightness(.84) saturate(1.50) contrast(1.12);
 }
 
 html.ytfb-active ytd-masthead#masthead {
@@ -130,10 +134,10 @@ html.ytfb-active.ytfb-topbar-video-enabled ytd-masthead#masthead {
   background:
     linear-gradient(
       100deg,
-      rgba(255,0,51,.08) 0%,
-      rgba(4,4,4,.12) 24%,
-      rgba(4,4,4,.12) 76%,
-      rgba(255,0,51,.04) 100%
+      rgba(255,0,51,.06) 0%,
+      rgba(4,4,4,.06) 24%,
+      rgba(4,4,4,.06) 76%,
+      rgba(255,0,51,.03) 100%
     ) !important;
 }
 
@@ -245,13 +249,21 @@ html.ytfb-active .ytfb-logo-anchor:focus-within::before,
 }
 
 html.ytfb-active ytd-watch-flexy,
+html.ytfb-active ytd-page-manager,
 html.ytfb-active #content.ytd-app,
 html.ytfb-active #page-manager,
 html.ytfb-active #columns,
 html.ytfb-active #primary,
+html.ytfb-active #primary-inner,
 html.ytfb-active #secondary,
+html.ytfb-active #secondary-inner,
+html.ytfb-active #below,
+html.ytfb-active #meta,
+html.ytfb-active #info,
+html.ytfb-active ytd-watch-metadata,
 html.ytfb-active #full-bleed-container,
 html.ytfb-active #player-full-bleed-container,
+html.ytfb-active #player-container-outer,
 html.ytfb-active #player-container-inner,
 html.ytfb-active #cinematics,
 html.ytfb-active #cinematics-container {
@@ -268,6 +280,16 @@ html.ytfb-active.ytfb-theater #movie_player {
 html.ytfb-active.ytfb-normal #player-container-outer,
 html.ytfb-active.ytfb-normal #player-container-inner {
   background: transparent !important;
+}
+
+/* Keep watch-page surfaces transparent enough for the sampled video to be
+ * visibly dynamic in both normal and theater modes. Individual cards can keep
+ * their own readable surfaces; the page shell no longer paints an opaque wall. */
+html.ytfb-active ytd-watch-flexy #below,
+html.ytfb-active ytd-watch-flexy #primary-inner,
+html.ytfb-active ytd-watch-flexy #secondary-inner,
+html.ytfb-active ytd-watch-flexy ytd-watch-metadata {
+  background-color: transparent !important;
 }
 
 /*
