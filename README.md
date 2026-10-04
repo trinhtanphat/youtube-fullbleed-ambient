@@ -1,5 +1,11 @@
 # YouTube Fullbleed Ambient
 
+## v1.6.1 interactive-ad overlay fix
+
+This patch targets the newer full-player interactive/sponsored card layout seen in 2026 YouTube experiments. Ad Shield now hides `.ytp-ad-player-overlay` and the newer `.ytp-ad-player-overlay-layout__ad-info-container` visual card without hiding the whole `.ytp-ad-module` (which would also hide the Skip control).
+
+The skip path also recognizes newer skip-slot containers and has a localized text/ARIA fallback. In particular, a classless Vietnamese **Bỏ qua** control inside the player is clicked when YouTube positively reports an ad. Existing player-API skip, bounded seek, poster shield, and muted 16x fallback remain in place.
+
 A lightweight Chrome/Edge Manifest V3 extension that reuses YouTube's existing player to create a full-page ambient background, a seamless transparent YouTube header, scroll docking, focus fill, and a multi-layer best-effort Ad Shield. It does not fetch a second YouTube media URL or create a second decoder.
 
 Version 1.6.0 removes the separately rendered masthead strip and lets the real YouTube header reveal the exact same full-page ambient surface. This removes the visible topbar/content seam and also removes one extra compositor/canvas surface. Ad Shield is strengthened to hide positively detected in-player ad media immediately, remove more current ad containers, try both DOM and player-API skip paths, seek short detected ad segments to their tail, and keep the existing 16x muted fallback.
