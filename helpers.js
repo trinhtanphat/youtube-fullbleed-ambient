@@ -38,7 +38,7 @@
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .replace(/\u0111/g, "d")
-      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
   }
 
@@ -52,7 +52,14 @@
     "saltar anuncio",
     "ignorer l annonce",
     "uberspringen",
-    "salta annuncio"
+    "salta annuncio",
+    "pular anuncio",
+    "pular anuncios",
+    "広告をスキップ",
+    "광고 건너뛰기",
+    "пропустить рекламу",
+    "跳过广告",
+    "跳過廣告"
   ]);
 
   const AD_SIGNAL_TEXTS = Object.freeze([
@@ -64,7 +71,12 @@
     "visit advertiser",
     "ad 1 of",
     "ad 2 of",
-    "ad 3 of"
+    "ad 3 of",
+    "広告",
+    "광고",
+    "реклама",
+    "广告",
+    "廣告"
   ]);
 
   function isAdSkipLabel(value) {
