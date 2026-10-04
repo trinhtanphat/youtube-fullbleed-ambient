@@ -24,24 +24,28 @@
   // runs at document_start before the isolated content script reads settings.
   // content.js later sets data-ytfb-ad-shield="off" immediately when the user
   // disables the master switch or Ad Shield toggle.
-  try {
-    let initialValue = sanitize(globalThis.ytInitialPlayerResponse);
-    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "ytInitialPlayerResponse");
-    if (!descriptor || descriptor.configurable !== false) {
-      Object.defineProperty(globalThis, "ytInitialPlayerResponse", {
+  function hookSanitizedGlobal(name) {
+    try {
+      let currentValue = sanitize(globalThis[name]);
+      const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+      if (descriptor?.configurable === false) return;
+      Object.defineProperty(globalThis, name, {
         configurable: true,
         enumerable: descriptor?.enumerable ?? true,
         get() {
-          return initialValue;
+          return currentValue;
         },
         set(value) {
-          initialValue = sanitize(value);
+          currentValue = sanitize(value);
         }
       });
+    } catch {
+      // Leave YouTube's own property untouched if an experiment locks it down.
     }
-  } catch {
-    // Leave YouTube's own property untouched if an experiment locks it down.
   }
+
+  hookSanitizedGlobal("ytInitialPlayerResponse");
+  hookSanitizedGlobal("playerResponse");
 
   const nativeResponseJson = Response.prototype.json;
   Response.prototype.json = async function ytfbResponseJson() {
