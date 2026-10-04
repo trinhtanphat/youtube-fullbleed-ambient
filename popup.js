@@ -129,7 +129,7 @@
     else if (response.watchMode === "normal") parts.push("Normal");
     if (response.reading) parts.push("calm");
     if (response.relayLive) parts.push("relay live");
-    if (response.topbarRelayLive || response.topbarVideo) parts.push("topbar live");
+    if (response.unifiedHeader || response.topbarVideo) parts.push("unified header");
     if (response.adBlock) {
       parts.push(adRules?.enabled ? `Ad Shield ${adRules.ruleCount || 0}/7` : "Ad Shield UI only");
     }

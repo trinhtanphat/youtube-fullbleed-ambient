@@ -75,15 +75,24 @@
     if (!player || !video) return null;
     globalThis.__ytfbAuditRate = video.playbackRate;
     globalThis.__ytfbAuditMuted = video.muted;
+    globalThis.__ytfbAuditTime = video.currentTime;
+    globalThis.__ytfbAuditPaused = video.paused;
+    video.pause();
     player.classList.add("ad-showing");
-    return { rate: video.playbackRate, muted: video.muted };
+    return { rate: video.playbackRate, muted: video.muted, paused: video.paused };
   })()`);
 
   await new Promise((resolve) => setTimeout(resolve, 600));
 
   const adAccelerationActive = await evaluate(`(() => {
     const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
-    return video ? { rate: video.playbackRate, muted: video.muted } : null;
+    return video ? {
+      rate: video.playbackRate,
+      muted: video.muted,
+      opacity: getComputedStyle(video).opacity,
+      adActiveClass: document.documentElement.classList.contains("ytfb-ad-active"),
+      fallbackOpacity: getComputedStyle(document.querySelector("#ytfb-root .ytfb-fallback")).opacity
+    } : null;
   })()`);
   const adStatusActive = await evaluate(`JSON.stringify((() => {
     let value = null;
@@ -91,7 +100,11 @@
     return value;
   })())`);
 
-  await evaluate(`document.querySelector("#movie_player")?.classList.remove("ad-showing")`);
+  await evaluate(`(() => {
+    document.querySelector("#movie_player")?.classList.remove("ad-showing");
+    const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
+    if (video && Number.isFinite(globalThis.__ytfbAuditTime)) video.currentTime = globalThis.__ytfbAuditTime;
+  })()`);
   await new Promise((resolve) => setTimeout(resolve, 600));
 
   const adAccelerationRestored = await evaluate(`(() => {
@@ -108,6 +121,11 @@
     globalThis.__ytfbRuntimeListener?.({ type: "ytfb-status" }, null, (response) => { value = response; });
     return value;
   })())`);
+
+  await evaluate(`(() => {
+    const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
+    if (video && globalThis.__ytfbAuditPaused === false) video.play().catch(() => {});
+  })()`);
 
   const result = await evaluate(`(() => {
     const selectors = [
@@ -140,6 +158,8 @@
         position: cs.position,
         pointerEvents: cs.pointerEvents,
         filter: cs.filter,
+        backgroundColor: cs.backgroundColor,
+        borderBottomWidth: cs.borderBottomWidth,
         zIndex: cs.zIndex,
         width: Math.round(r.width),
         height: Math.round(r.height),
@@ -192,14 +212,17 @@
   console.log(JSON.stringify(value, null, 2));
 
   const topbar = value?.selectors?.find((item) => item.selector === "#ytfb-topbar-video");
+  const masthead = value?.selectors?.find((item) => item.selector === "#masthead-container");
   if (!value?.active || !value?.topbarVideoEnabled || !value?.adShieldEnabled) process.exitCode = 2;
-  if (!topbar?.found || topbar.intrinsicWidth !== 640 || topbar.intrinsicHeight !== 64 ||
-      topbar.pointerEvents !== "none") process.exitCode = 3;
+  if (topbar?.found || !masthead?.found || masthead.backgroundColor === undefined) process.exitCode = 3;
   if (!value?.adSkipSimulated || value?.playerStillAdShowing) process.exitCode = 4;
   if (!value?.adAccelerationActive?.muted || value.adAccelerationActive.rate < 8 ||
-      !value?.adStatusActive?.adAccelerating || value?.adStatusActive?.adAccelerations < 1) process.exitCode = 5;
+      value.adAccelerationActive.opacity !== "0" || !value.adAccelerationActive.adActiveClass) process.exitCode = 5;
+  if (value?.adStatusActive &&
+      (!value.adStatusActive.adAccelerating || value.adStatusActive.adAccelerations < 1)) process.exitCode = 5;
   if (value?.adAccelerationRestored?.rate !== value?.adAccelerationRestored?.expectedRate ||
-      value?.adStatusRestored?.adAccelerating) process.exitCode = 6;
+      value?.adAccelerationRestored?.muted !== value?.adAccelerationRestored?.expectedMuted ||
+      (value?.adStatusRestored && value.adStatusRestored.adAccelerating)) process.exitCode = 6;
 
   ws.close();
 })().catch((error) => {

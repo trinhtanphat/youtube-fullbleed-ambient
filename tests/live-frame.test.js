@@ -26,7 +26,6 @@ test("captureStream relay is preferred for truly live ambient video", () => {
 test("relay creates no second network media source", () => {
   assert.doesNotMatch(js, /\.src\s*=\s*video\.src/);
   assert.doesNotMatch(js, /document\.createElement\(["']source["']\)/);
-  assert.match(js, /srcObject = state\.relayStream/);
   assert.match(js, /srcObject = stream/);
 });
 
@@ -37,11 +36,12 @@ test("ambient poster remains visible until relay or first fallback frame arrives
   assert.match(js, /setRelayLive\(true\)/);
 });
 
-test("full-page and masthead relay surfaces are non-interactive", () => {
+test("unified header reuses the full-page ambient surface", () => {
   assert.match(js, /relay\.className = "ytfb-relay"/);
-  assert.match(js, /relay\.id = "ytfb-topbar-relay"/);
-  assert.match(css, /#ytfb-topbar-relay/);
-  assert.match(css, /pointer-events: none/);
+  assert.doesNotMatch(js, /relay\.id = "ytfb-topbar-relay"/);
+  assert.doesNotMatch(js, /canvas\.id = "ytfb-topbar-video"/);
+  assert.match(css, /html\.ytfb-active #masthead-container[\s\S]*background: transparent !important/);
+  assert.match(css, /#ytfb-topbar-video,[\s\S]*display: none !important/);
 });
 
 test("timer and heartbeat watchdogs recover stranded fallback callbacks", () => {

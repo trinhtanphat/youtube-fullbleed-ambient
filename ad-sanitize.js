@@ -17,7 +17,19 @@
     "adPlacementRenderer",
     "adSlotRenderer",
     "adBreakRenderer",
-    "playerLegacyDesktopWatchAdsRenderer"
+    "playerLegacyDesktopWatchAdsRenderer",
+    "linearAdSequenceRenderer",
+    "instreamVideoAdRenderer",
+    "companionAdRenderer",
+    "adInfoDialogRenderer",
+    "adLayoutLoggingData",
+    "playerAdParams",
+    "adContextParams",
+    "adVideoId",
+    "promotedSparklesWebRenderer",
+    "displayAdRenderer",
+    "inFeedAdLayoutRenderer",
+    "actionCompanionAdRenderer"
   ]);
 
   function shouldSanitizeResponseUrl(urlLike) {
@@ -68,7 +80,7 @@
 
   function sanitizeJsonText(text, urlLike) {
     if (!shouldSanitizeResponseUrl(urlLike) || typeof text !== "string") return text;
-    if (!/"(?:adPlacements|playerAds|adSlots|adBreakHeartbeatParams|ad3Module)"/.test(text)) {
+    if (!/"(?:adPlacements|playerAds|adSlots|adBreakHeartbeatParams|ad3Module|linearAdSequenceRenderer|instreamVideoAdRenderer|playerAdParams|adContextParams)"/.test(text)) {
       return text;
     }
     try {

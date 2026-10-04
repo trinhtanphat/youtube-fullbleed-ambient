@@ -57,132 +57,118 @@ const crypto = require("node:crypto");
   }
 
   async function readState() {
-    return JSON.parse(await evaluate(`JSON.stringify((() => {
-      const html = document.documentElement;
-      const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
-      const relay = document.querySelector(".ytfb-relay");
-      const topbarRelay = document.querySelector("#ytfb-topbar-relay");
-      const topbarCanvas = document.querySelector("#ytfb-topbar-video");
-      const root = document.querySelector("#ytfb-root");
-      const masthead = document.querySelector("#masthead-container");
-      const mastheadRect = masthead?.getBoundingClientRect();
-      return {
-        url: location.href,
-        mainWorldInjected: Boolean(globalThis.__ytfbRuntimeListener),
-        active: html.classList.contains("ytfb-active"),
-        normal: html.classList.contains("ytfb-normal"),
-        theater: html.classList.contains("ytfb-theater"),
-        relayLive: html.classList.contains("ytfb-relay-live"),
-        topbarRelayLive: html.classList.contains("ytfb-topbar-relay-live"),
-        root: Boolean(root),
-        canvas: Boolean(root?.querySelector("canvas")),
-        relay: Boolean(relay),
-        topbarCanvas: Boolean(topbarCanvas),
-        topbarRelay: Boolean(topbarRelay),
-        sourceTime: video?.currentTime ?? null,
-        sourcePaused: video?.paused ?? null,
-        sourceReady: video?.readyState ?? null,
-        relayTime: relay?.currentTime ?? null,
-        relayReady: relay?.readyState ?? null,
-        topbarRelayTime: topbarRelay?.currentTime ?? null,
-        topbarRelayReady: topbarRelay?.readyState ?? null,
-        masthead: mastheadRect ? {
-          x: Math.max(0, mastheadRect.x),
-          y: Math.max(0, mastheadRect.y),
-          width: Math.max(1, mastheadRect.width),
-          height: Math.max(1, mastheadRect.height)
-        } : null
-      };
-    })())`));
+    const expression =
+      "JSON.stringify((()=>{" +
+      "const html=document.documentElement;" +
+      "const video=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
+      "const relay=document.querySelector('.ytfb-relay');" +
+      "const root=document.querySelector('#ytfb-root');" +
+      "const masthead=document.querySelector('#masthead-container');" +
+      "const mastheadStyle=masthead?getComputedStyle(masthead):null;" +
+      "const rect=masthead?.getBoundingClientRect();" +
+      "return {" +
+      "url:location.href," +
+      "mainWorldInjected:Boolean(globalThis.__ytfbRuntimeListener)," +
+      "active:html.classList.contains('ytfb-active')," +
+      "normal:html.classList.contains('ytfb-normal')," +
+      "theater:html.classList.contains('ytfb-theater')," +
+      "relayLive:html.classList.contains('ytfb-relay-live')," +
+      "root:Boolean(root)," +
+      "canvas:Boolean(root?.querySelector('canvas'))," +
+      "relay:Boolean(relay)," +
+      "legacyTopbarCanvas:Boolean(document.querySelector('#ytfb-topbar-video'))," +
+      "legacyTopbarRelay:Boolean(document.querySelector('#ytfb-topbar-relay'))," +
+      "sourceTime:video?.currentTime??null," +
+      "sourcePaused:video?.paused??null," +
+      "sourceReady:video?.readyState??null," +
+      "relayTime:relay?.currentTime??null," +
+      "relayReady:relay?.readyState??null," +
+      "mastheadBackground:mastheadStyle?.backgroundColor??null," +
+      "mastheadBorder:mastheadStyle?.borderBottomWidth??null," +
+      "masthead:rect?{x:Math.max(0,rect.x),y:Math.max(0,rect.y),width:Math.max(1,rect.width),height:Math.max(1,rect.height)}:null" +
+      "};})())";
+    return JSON.parse(await evaluate(expression));
   }
 
   await call("Page.enable");
 
-  const playback = JSON.parse(await evaluate(`JSON.stringify((() => {
-    const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
-    if (!video) return null;
-    return {
-      paused: video.paused,
-      muted: video.muted,
-      currentTime: video.currentTime,
-      duration: video.duration
-    };
-  })())`));
+  const playback = JSON.parse(await evaluate(
+    "JSON.stringify((()=>{" +
+    "const video=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
+    "if(!video)return null;" +
+    "return {paused:video.paused,muted:video.muted,currentTime:video.currentTime,duration:video.duration};" +
+    "})())"
+  ));
 
   let repositionedForAudit = false;
 
   try {
-    const prep = JSON.parse(await evaluate(`JSON.stringify((() => {
-      const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
-      if (!video) return { repositioned: false };
-      const nearEnd = Number.isFinite(video.duration) &&
-        video.duration > 20 &&
-        video.duration - video.currentTime < 15;
-      if (nearEnd) {
-        const safeTime = Math.min(30, Math.max(5, video.duration * 0.25));
-        video.currentTime = safeTime;
-        return { repositioned: true, safeTime };
-      }
-      return { repositioned: false };
-    })())`));
-    repositionedForAudit = Boolean(prep?.repositioned);
-    if (repositionedForAudit) {
-      await new Promise((resolve) => setTimeout(resolve, 700));
-    }
+    const prep = JSON.parse(await evaluate(
+      "JSON.stringify((()=>{" +
+      "const video=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
+      "if(!video)return {repositioned:false};" +
+      "const nearEnd=Number.isFinite(video.duration)&&video.duration>20&&video.duration-video.currentTime<15;" +
+      "if(nearEnd){const safeTime=Math.min(30,Math.max(5,video.duration*0.25));video.currentTime=safeTime;return {repositioned:true,safeTime};}" +
+      "return {repositioned:false};" +
+      "})())"
+    ));
 
-    await evaluate(`(async () => {
-      const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
-      if (!video) return false;
-      video.muted = true;
-      try { await video.play(); } catch {}
-      return !video.paused;
-    })()`);
+    repositionedForAudit = Boolean(prep?.repositioned);
+    if (repositionedForAudit) await new Promise((resolve) => setTimeout(resolve, 700));
+
+    await evaluate(
+      "(async()=>{" +
+      "const video=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
+      "if(!video)return false;" +
+      "video.muted=true;" +
+      "try{await video.play();}catch{}" +
+      "return !video.paused;" +
+      "})()"
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 1200));
     const first = await readState();
 
     if (requireInstalled && first.mainWorldInjected) {
-      throw new Error("Detected a MAIN-world injected runtime; reload the page and audit the installed extension without cdp-inject.js");
+      throw new Error("Detected an injected MAIN-world runtime; audit the installed unpacked extension without cdp-inject.js");
     }
 
-    await evaluate(`(() => {
-      const style = document.createElement("style");
-      style.id = "ytfb-live-audit-background";
-      style.textContent =
-        "body>*:not(#ytfb-root){visibility:hidden!important}" +
-        " #ytfb-root,#ytfb-root *{visibility:visible!important}" +
-        " #ytfb-root{opacity:1!important}";
-      document.documentElement.append(style);
-      return true;
-    })()`);
+    const masthead = first.masthead || { x: 0, y: 0, width: 1000, height: 58 };
+
+    await evaluate(
+      "(()=>{" +
+      "const style=document.createElement('style');" +
+      "style.id='ytfb-live-audit-single-surface';" +
+      "style.textContent='body>*:not(#ytfb-root){visibility:hidden!important} #ytfb-root,#ytfb-root *{visibility:visible!important} #ytfb-root{opacity:1!important}';" +
+      "document.documentElement.append(style);" +
+      "return true;" +
+      "})()"
+    );
 
     await new Promise((resolve) => setTimeout(resolve, 180));
+
     const bgA = await call("Page.captureScreenshot", {
       format: "png",
       captureBeyondViewport: false
     });
+    const headerA = await call("Page.captureScreenshot", {
+      format: "png",
+      clip: {
+        x: masthead.x,
+        y: masthead.y,
+        width: Math.min(1200, masthead.width),
+        height: Math.min(100, masthead.height),
+        scale: 1
+      }
+    });
+
     await new Promise((resolve) => setTimeout(resolve, 1300));
+
     const bgB = await call("Page.captureScreenshot", {
       format: "png",
       captureBeyondViewport: false
     });
-    await evaluate(`document.getElementById("ytfb-live-audit-background")?.remove()`);
-
-    const masthead = first.masthead || { x: 0, y: 0, width: 1000, height: 58 };
-    await evaluate(`(() => {
-      const style = document.createElement("style");
-      style.id = "ytfb-live-audit-topbar";
-      style.textContent =
-        "body>*{visibility:hidden!important}" +
-        " #masthead-container,#masthead-container *{visibility:hidden!important}" +
-        " #masthead-container,#ytfb-topbar-video,#ytfb-topbar-relay{visibility:visible!important}" +
-        " #ytfb-topbar-relay{opacity:1!important}";
-      document.documentElement.append(style);
-      return true;
-    })()`);
-
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    const topA = await call("Page.captureScreenshot", {
+    const headerB = await call("Page.captureScreenshot", {
       format: "png",
       clip: {
         x: masthead.x,
@@ -192,30 +178,19 @@ const crypto = require("node:crypto");
         scale: 1
       }
     });
-    await new Promise((resolve) => setTimeout(resolve, 1300));
-    const topB = await call("Page.captureScreenshot", {
-      format: "png",
-      clip: {
-        x: masthead.x,
-        y: masthead.y,
-        width: Math.min(1200, masthead.width),
-        height: Math.min(100, masthead.height),
-        scale: 1
-      }
-    });
-    await evaluate(`document.getElementById("ytfb-live-audit-topbar")?.remove()`);
+
+    await evaluate("document.getElementById('ytfb-live-audit-single-surface')?.remove()");
 
     const second = await readState();
     const backgroundHashA = hashScreenshot(bgA);
     const backgroundHashB = hashScreenshot(bgB);
-    const topbarHashA = hashScreenshot(topA);
-    const topbarHashB = hashScreenshot(topB);
+    const headerHashA = hashScreenshot(headerA);
+    const headerHashB = hashScreenshot(headerB);
 
     const sourceDelta = (second.sourceTime ?? 0) - (first.sourceTime ?? 0);
     const relayDelta = (second.relayTime ?? 0) - (first.relayTime ?? 0);
-    const topbarRelayDelta = (second.topbarRelayTime ?? 0) - (first.topbarRelayTime ?? 0);
     const backgroundChanged = backgroundHashA !== backgroundHashB;
-    const topbarChanged = topbarHashA !== topbarHashB;
+    const headerChanged = headerHashA !== headerHashB;
 
     const report = {
       port,
@@ -224,41 +199,43 @@ const crypto = require("node:crypto");
       active: first.active,
       sourceDeltaSeconds: Number(sourceDelta.toFixed(3)),
       relayDeltaSeconds: Number(relayDelta.toFixed(3)),
-      topbarRelayDeltaSeconds: Number(topbarRelayDelta.toFixed(3)),
       backgroundChanged,
-      topbarChanged,
+      headerCropChanged: headerChanged,
+      unifiedHeader: {
+        mastheadBackground: first.mastheadBackground,
+        mastheadBorder: first.mastheadBorder,
+        legacyTopbarCanvas: first.legacyTopbarCanvas,
+        legacyTopbarRelay: first.legacyTopbarRelay
+      },
       surfaces: {
         root: first.root,
         canvas: first.canvas,
         relay: first.relay,
-        relayLive: first.relayLive,
-        topbarCanvas: first.topbarCanvas,
-        topbarRelay: first.topbarRelay,
-        topbarRelayLive: first.topbarRelayLive
+        relayLive: first.relayLive
       },
       hashes: {
         backgroundFirst: backgroundHashA,
         backgroundSecond: backgroundHashB,
-        topbarFirst: topbarHashA,
-        topbarSecond: topbarHashB
+        headerFirst: headerHashA,
+        headerSecond: headerHashB
       }
     };
 
     console.log(JSON.stringify(report, null, 2));
 
     if (!first.active || !first.root || (!first.canvas && !first.relay)) process.exitCode = 2;
-    if (!first.topbarCanvas && !first.topbarRelay) process.exitCode = 3;
-    if (sourceDelta <= 0.5) process.exitCode = 4;
+    if (first.legacyTopbarCanvas || first.legacyTopbarRelay) process.exitCode = 3;
+    if (first.mastheadBackground !== "rgba(0, 0, 0, 0)" || first.mastheadBorder !== "0px") process.exitCode = 4;
+    if (sourceDelta <= 0.5) process.exitCode = 5;
 
     const backgroundProgressed = relayDelta > 0.5 || backgroundChanged;
-    const topbarProgressed = topbarRelayDelta > 0.5 || topbarChanged;
-    if (!backgroundProgressed || !topbarProgressed) process.exitCode = 5;
-    if (strictMotion && (!backgroundChanged || !topbarChanged)) process.exitCode = 6;
+    if (!backgroundProgressed) process.exitCode = 6;
+    if (strictMotion && (!backgroundChanged || !headerChanged)) process.exitCode = 7;
   } finally {
-    await evaluate(`document.getElementById("ytfb-live-audit-background")?.remove(); document.getElementById("ytfb-live-audit-topbar")?.remove()`).catch(() => {});
+    await evaluate("document.getElementById('ytfb-live-audit-single-surface')?.remove()").catch(() => {});
     if (playback) {
       const restoreExpression =
-        "(() => {" +
+        "(()=>{" +
         "const video=document.querySelector('video.html5-main-video')||document.querySelector('video');" +
         "if(!video)return false;" +
         "video.muted=" + JSON.stringify(playback.muted) + ";" +
@@ -276,4 +253,3 @@ const crypto = require("node:crypto");
   console.error(error);
   process.exitCode = 1;
 });
-

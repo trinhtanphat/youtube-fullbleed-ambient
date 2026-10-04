@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.5.2";
+  const RUNTIME_VERSION = "1.6.0";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -93,22 +93,15 @@
     ensureRoot();
     const src = H.getThumbnailUrl(location.href);
     if (src && state.fallback.src !== src) state.fallback.src = src;
-    if (state.topbarCanvas) {
-      state.topbarCanvas.style.backgroundImage = src ? `url("${src}")` : "";
-      state.topbarCanvas.style.backgroundSize = "cover";
-      state.topbarCanvas.style.backgroundPosition = "center";
-    }
     state.root.classList.toggle("ytfb-static", state.drawFailed);
     state.root.classList.toggle("ytfb-awaiting-frame", !state.relayLive && !state.hasAmbientFrame && !state.drawFailed);
   }
 
   function clearTopbarRelay() {
-    if (state.topbarRelay) {
-      try {
-        state.topbarRelay.pause();
-        state.topbarRelay.srcObject = null;
-      } catch {}
-      state.topbarRelay.remove();
+    const relay = state.topbarRelay || document.getElementById("ytfb-topbar-relay");
+    if (relay) {
+      try { relay.pause(); relay.srcObject = null; } catch {}
+      relay.remove();
     }
     state.topbarRelay = null;
     state.topbarRelayLive = false;
@@ -116,89 +109,11 @@
   }
 
   function clearTopbarVideoSurface() {
-    state.topbarCanvas?.remove();
+    (state.topbarCanvas || document.getElementById("ytfb-topbar-video"))?.remove();
     state.topbarCanvas = null;
     state.topbarCtx = null;
     state.lastTopbarDraw = 0;
     clearTopbarRelay();
-    document.documentElement.classList.remove("ytfb-topbar-video-enabled");
-  }
-
-  function getTopbarHost() {
-    return document.querySelector("#masthead-container") ||
-      document.querySelector("ytd-masthead#masthead");
-  }
-
-  function ensureTopbarVideoSurface() {
-    if (!state.active || !state.settings.topbarVideo) {
-      clearTopbarVideoSurface();
-      return null;
-    }
-
-    const host = getTopbarHost();
-    if (!host) return null;
-    if (state.topbarCanvas?.isConnected && state.topbarCanvas.parentElement === host) {
-      return state.topbarCanvas;
-    }
-
-    state.topbarCanvas?.remove();
-    const canvas = document.createElement("canvas");
-    canvas.id = "ytfb-topbar-video";
-    canvas.width = 640;
-    canvas.height = 64;
-    canvas.setAttribute("aria-hidden", "true");
-    const poster = H.getThumbnailUrl(location.href);
-    canvas.style.backgroundImage = poster ? `url("${poster}")` : "";
-    canvas.style.backgroundSize = "cover";
-    canvas.style.backgroundPosition = "center";
-    host.prepend(canvas);
-
-    state.topbarCanvas = canvas;
-    state.topbarCtx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-    state.lastTopbarDraw = 0;
-    return canvas;
-  }
-
-  function ensureTopbarRelay() {
-    if (!state.active || !state.settings.topbarVideo || !state.relayStream) {
-      clearTopbarRelay();
-      return null;
-    }
-
-    const host = getTopbarHost();
-    if (!host) return null;
-    if (
-      state.topbarRelay?.isConnected &&
-      state.topbarRelay.parentElement === host &&
-      state.topbarRelay.srcObject === state.relayStream
-    ) {
-      return state.topbarRelay;
-    }
-
-    clearTopbarRelay();
-    const relay = document.createElement("video");
-    relay.id = "ytfb-topbar-relay";
-    relay.muted = true;
-    relay.autoplay = true;
-    relay.playsInline = true;
-    relay.disablePictureInPicture = true;
-    relay.setAttribute("aria-hidden", "true");
-    relay.setAttribute("tabindex", "-1");
-    relay.srcObject = state.relayStream;
-    relay.addEventListener("playing", () => {
-      if (relay !== state.topbarRelay) return;
-      state.topbarRelayLive = true;
-      document.documentElement.classList.add("ytfb-topbar-relay-live");
-    }, { passive: true });
-    relay.addEventListener("error", () => {
-      if (relay !== state.topbarRelay) return;
-      state.topbarRelayLive = false;
-      document.documentElement.classList.remove("ytfb-topbar-relay-live");
-    }, { passive: true });
-    host.prepend(relay);
-    state.topbarRelay = relay;
-    relay.play().catch(() => {});
-    return relay;
   }
 
   function setRelayLive(next) {
@@ -208,7 +123,6 @@
       state.lastRelayTime = state.relayVideo?.currentTime || 0;
       state.lastRelayProgressAt = performance.now();
       state.root?.classList.remove("ytfb-static", "ytfb-awaiting-frame");
-      ensureTopbarRelay();
     }
   }
 
@@ -246,7 +160,6 @@
       state.relayStream &&
       state.relayVideo?.srcObject === state.relayStream
     ) {
-      ensureTopbarRelay();
       return state.relayLive;
     }
 
@@ -287,42 +200,10 @@
       if (state.active && !document.hidden) scheduleRender();
     }, { once: true, passive: true });
 
-    ensureTopbarRelay();
     relay.play().then(markPlaying).catch(() => {});
     return true;
   }
 
-  function drawTopbarFrame(video, now, force = false) {
-    if (!state.settings.topbarVideo || !video || video.readyState < 2) return;
-    if (!force && now - state.lastTopbarDraw < 240) return;
-
-    const canvas = ensureTopbarVideoSurface();
-    const ctx = state.topbarCtx;
-    if (!canvas || !ctx || !video.videoWidth || !video.videoHeight) return;
-
-    const sourceRatio = video.videoWidth / video.videoHeight;
-    const targetRatio = canvas.width / canvas.height;
-    let sx = 0;
-    let sy = 0;
-    let sw = video.videoWidth;
-    let sh = video.videoHeight;
-
-    if (sourceRatio < targetRatio) {
-      sh = sw / targetRatio;
-      sy = (video.videoHeight - sh) / 2;
-    } else {
-      sw = sh * targetRatio;
-      sx = (video.videoWidth - sw) / 2;
-    }
-
-    try {
-      ctx.filter = "none";
-      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      state.lastTopbarDraw = now;
-    } catch {
-      // The main ambient fallback handles transient draw/cross-origin failures.
-    }
-  }
 
   function setVisualSettings() {
     const root = ensureRoot();
@@ -414,16 +295,10 @@
       return;
     }
 
-    if (state.relayLive && state.relaySource === video) {
-      ensureTopbarRelay();
-      return;
-    }
+    if (state.relayLive && state.relaySource === video) return;
 
     const now = performance.now();
     drawAmbientFrame(video, now, force);
-    // Keep this independent from the ambient draw so a transient failure in
-    // one surface never freezes the other.
-    drawTopbarFrame(video, now, force);
   }
 
   function scheduleRender() {
@@ -484,7 +359,6 @@
         if (relayTime > state.lastRelayTime + 0.02) {
           state.lastRelayTime = relayTime;
           state.lastRelayProgressAt = performance.now();
-          ensureTopbarRelay();
           return;
         }
 
@@ -596,8 +470,56 @@
     ".ytp-ad-duration-remaining",
     ".ytp-ad-player-overlay",
     ".ytp-ad-action-interstitial",
+    ".ytp-ad-player-overlay-instream-info",
+    ".ytp-ad-message-container",
+    ".ytp-ad-preview-text",
+    ".ytp-ad-persistent-progress-bar-container",
     ".video-ads.ytp-ad-module > *"
   ];
+
+  const AD_REMOVE_SELECTORS = [
+    "ytd-ad-slot-renderer",
+    "ytd-in-feed-ad-layout-renderer",
+    "ytd-display-ad-renderer",
+    "ytd-promoted-video-renderer",
+    "ytd-promoted-sparkles-web-renderer",
+    "ytd-action-companion-ad-renderer",
+    "ytd-player-legacy-desktop-watch-ads-renderer",
+    "ytd-search-pyv-renderer",
+    "ytd-rich-item-renderer:has(ytd-ad-slot-renderer)",
+    "ytd-rich-section-renderer:has(ytd-ad-slot-renderer)"
+  ];
+
+  function removeCosmeticAds() {
+    for (const selector of AD_REMOVE_SELECTORS) {
+      document.querySelectorAll(selector).forEach((element) => element.remove());
+    }
+  }
+
+  function trySkipPlayerApi(player) {
+    if (!player || typeof player.skipAd !== "function") return false;
+    try {
+      player.skipAd();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function seekAdTail(video) {
+    if (!video?.isConnected) return false;
+    const duration = Number(video.duration);
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 120) return false;
+    const target = Math.max(video.currentTime, duration - 0.08);
+    if (target <= video.currentTime + 0.12) return false;
+    try {
+      video.currentTime = target;
+      state.adSeeks += 1;
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   function elementVisible(element) {
     if (!(element instanceof Element)) return false;
@@ -630,6 +552,7 @@
   }
 
   function restoreAdPlayback() {
+    document.documentElement.classList.remove("ytfb-ad-active");
     if (state.adTimer !== null) {
       clearTimeout(state.adTimer);
       state.adTimer = null;
@@ -660,21 +583,37 @@
       return;
     }
 
+    const player = document.querySelector("#movie_player");
     const video = state.adRestore.video;
     if (!video?.isConnected) {
       restoreAdPlayback();
       return;
     }
 
+    clickFirstVisible(AD_CLOSE_SELECTORS);
+    if (clickFirstVisible(AD_SKIP_SELECTORS)) {
+      state.adSkipClicks += 1;
+      state.adTimer = setTimeout(keepAdAccelerated, 60);
+      return;
+    }
+    if (trySkipPlayerApi(player)) {
+      state.adSkipClicks += 1;
+      if (!playerReportsAd()) {
+        state.adTimer = setTimeout(keepAdAccelerated, 60);
+        return;
+      }
+    }
+
     try {
       video.muted = true;
       video.playbackRate = 16;
+      seekAdTail(video);
     } catch {
       restoreAdPlayback();
       return;
     }
 
-    state.adTimer = setTimeout(keepAdAccelerated, 180);
+    state.adTimer = setTimeout(keepAdAccelerated, 80);
   }
 
   function clickFirstVisible(selectors) {
@@ -698,14 +637,23 @@
   }
 
   function cleanupAds() {
-    document.documentElement.classList.toggle("ytfb-ad-shield", state.settings.enabled && state.settings.adBlock);
-    if (!state.settings.enabled || !state.settings.adBlock) {
+    const shieldEnabled = state.settings.enabled && state.settings.adBlock;
+    const html = document.documentElement;
+    html.classList.toggle("ytfb-ad-shield", shieldEnabled);
+
+    if (!shieldEnabled) {
+      html.classList.remove("ytfb-ad-active");
       restoreAdPlayback();
       return;
     }
 
+    removeCosmeticAds();
+
     const player = document.querySelector("#movie_player");
-    if (!playerReportsAd()) {
+    const adActive = playerReportsAd();
+    html.classList.toggle("ytfb-ad-active", adActive);
+
+    if (!adActive) {
       restoreAdPlayback();
       return;
     }
@@ -714,15 +662,32 @@
 
     if (clickFirstVisible(AD_SKIP_SELECTORS)) {
       state.adSkipClicks += 1;
+      queueAdCleanup(40);
+      return;
+    }
+    if (trySkipPlayerApi(player)) {
+      state.adSkipClicks += 1;
+      if (!playerReportsAd()) {
+        queueAdCleanup(40);
+        return;
+      }
+    }
+
+    const video = state.video || document.querySelector("video.html5-main-video") || document.querySelector("video");
+    if (!video || video.readyState < 2) {
+      queueAdCleanup(80);
       return;
     }
 
-    const video = state.video;
-    if (!video || video.readyState < 2) {
-      queueAdCleanup(180);
+    // A positive YouTube ad state plus a short finite media duration is a safe
+    // signal to jump to the segment tail. This prevents the ad from remaining
+    // visible while the 16x fallback is working.
+    seekAdTail(video);
+
+    if (state.adRestore) {
+      queueAdCleanup(80);
       return;
     }
-    if (state.adRestore) return;
 
     state.adRestore = {
       video,
@@ -734,19 +699,7 @@
       video.muted = true;
       video.playbackRate = 16;
       state.adAccelerations += 1;
-
-      // When YouTube exposes a short, explicit ad media segment, seek to its
-      // tail as a second fallback. Never do this for long/ambiguous media.
-      const duration = Number(video.duration);
-      if (hasVisibleAdUi() && Number.isFinite(duration) && duration > 0 && duration <= 180) {
-        const target = Math.max(video.currentTime, duration - 0.12);
-        if (target > video.currentTime + 0.25) {
-          video.currentTime = target;
-          state.adSeeks += 1;
-        }
-      }
-
-      state.adTimer = setTimeout(keepAdAccelerated, 180);
+      state.adTimer = setTimeout(keepAdAccelerated, 80);
     } catch {
       restoreAdPlayback();
     }
@@ -800,8 +753,9 @@
       return;
     }
 
-    ensureTopbarVideoSurface();
-    ensureTopbarRelay();
+    // Remove stale v1.5 masthead surfaces. v1.6 reveals the same full-page
+    // ambient surface through a transparent masthead for perfect continuity.
+    clearTopbarVideoSurface();
     const masthead = document.querySelector("ytd-masthead#masthead");
     if (!masthead) return;
 
@@ -1078,13 +1032,7 @@
       const logoNeedsSync = !state.brandLogo?.isConnected ||
         !state.brandLogo.closest("ytd-masthead#masthead") ||
         document.getElementById("ytfb-brand-fallback");
-      const topbarHost = getTopbarHost();
-      const topbarNeedsSync = state.settings.topbarVideo &&
-        (!state.topbarCanvas?.isConnected ||
-          state.topbarCanvas.parentElement !== topbarHost ||
-          (state.relayStream &&
-            (!state.topbarRelay?.isConnected || state.topbarRelay.parentElement !== topbarHost)));
-      if (logoNeedsSync || topbarNeedsSync) syncTopbarBrand();
+      if (logoNeedsSync) syncTopbarBrand();
       if (state.observedFlexy !== document.querySelector("ytd-watch-flexy")) syncWatchModeObserver();
       if (state.adObservedPlayer !== document.querySelector("#movie_player")) syncAdObserver();
       cleanupAds();
@@ -1193,15 +1141,18 @@
           relayLive: state.relayLive,
           relayTime: state.relayVideo?.currentTime ?? null,
           relayTracks: state.relayStream?.getVideoTracks?.().length || 0,
-          topbarRelayLive: state.topbarRelayLive,
-          topbarRelayTime: state.topbarRelay?.currentTime ?? null,
+          topbarRelayLive: false,
+          topbarRelayTime: null,
           renderTimerActive: state.timerId !== null,
           videoFrameCallbackActive: state.videoFrameCallbackId !== null,
           renderWatchdogActive: state.renderWatchdogId !== null,
           canvas: state.canvas ? { width: state.canvas.width, height: state.canvas.height } : null,
-          topbarVideo: Boolean((state.topbarRelay?.isConnected || state.topbarCanvas?.isConnected) && state.settings.topbarVideo),
-          topbarHost: state.topbarCanvas?.parentElement?.id || state.topbarCanvas?.parentElement?.tagName || null,
-          topbarFrameAgeMs: state.topbarRelayLive ? 0 : (state.lastTopbarDraw > 0 ? Math.round(performance.now() - state.lastTopbarDraw) : null),
+          topbarVideo: Boolean(state.active && state.settings.topbarVideo),
+          unifiedHeader: Boolean(state.active && state.settings.topbarVideo),
+          topbarHost: null,
+          topbarFrameAgeMs: state.relayLive
+            ? 0
+            : (state.lastDraw > 0 ? Math.round(performance.now() - state.lastDraw) : null),
           videoReady: Boolean(state.video?.readyState >= 2 && state.video?.videoWidth > 0),
           videoPaused: state.video ? state.video.paused : null,
           watchMode: state.watchMode,

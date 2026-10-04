@@ -3,7 +3,7 @@
 importScripts("ad-rules.js");
 
 const R = globalThis.YTFBAdRules;
-const RUNTIME_VERSION = "1.5.2";
+const RUNTIME_VERSION = "1.6.0";
 const DEFAULT_SETTINGS = Object.freeze({ enabled: true, adBlock: true });
 
 function shieldEnabled(settings) {
