@@ -1,5 +1,9 @@
 # YouTube Fullbleed Ambient
 
+## v1.7.1 YouTube ad-detection hotfix
+
+The previous localized Skip fallback contained mojibake after a Windows encoding round-trip, so Vietnamese **Bỏ qua** could fail to match. v1.7.1 moves label matching into tested, accent-folding helpers and adds a visible generic `ytp-ad-*` plus sponsored-label fallback. Mutation-driven cleanup is also queued faster so a newly mounted ad card is shielded with less visual leakage.
+
 ## v1.7.0 AdGuard-style counters
 
 The popup now shows **Blocked on this tab**, **Total blocked**, and a breakdown for **Network / Page / Player** handling. For unpacked development installs, the network count uses Chromium's `declarativeNetRequestFeedback` event so the counter reflects actual matches of this extension's DNR rules. Page counts track removed sponsored/ad containers and Player counts track one positively detected in-player ad episode.

@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.7.0";
+  const RUNTIME_VERSION = "1.7.1";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -555,10 +555,30 @@
     return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) > 0;
   }
 
-  function hasVisibleAdUi() {
-    return AD_VISIBLE_SELECTORS.some((selector) =>
+  function hasVisibleAdUi(player = document.querySelector("#movie_player")) {
+    if (AD_VISIBLE_SELECTORS.some((selector) =>
       [...document.querySelectorAll(selector)].some(elementVisible)
-    );
+    )) {
+      return true;
+    }
+
+    if (!player) return false;
+
+    for (const element of player.querySelectorAll("[class*='ytp-ad-']")) {
+      if (elementVisible(element)) return true;
+    }
+
+    for (const element of player.querySelectorAll("button, [role='button'], [aria-label], [title]")) {
+      if (!elementVisible(element)) continue;
+      const labels = [
+        element.getAttribute("aria-label"),
+        element.getAttribute("title"),
+        element.textContent
+      ].filter(Boolean);
+      if (labels.some((label) => H.isAdSignalText(label))) return true;
+    }
+
+    return false;
   }
 
   function playerReportsAd() {
@@ -574,7 +594,7 @@
       // YouTube experiments do not all expose the same player API.
     }
 
-    return hasVisibleAdUi();
+    return hasVisibleAdUi(player);
   }
 
   function restoreAdPlayback() {
@@ -654,8 +674,6 @@
     return false;
   }
 
-  const AD_SKIP_LABEL_RE = /^(?:skip(?:\s+ad(?:s)?)?|bỏ\s+qua(?:\s+quảng\s+cáo)?|omitir(?:\s+anuncio)?|saltar(?:\s+anuncio)?|ignorer(?:\s+l['’]annonce)?|überspringen|salta(?:\s+annuncio)?|広告をスキップ)$/i;
-
   function clickLocalizedSkipControl() {
     const player = document.querySelector("#movie_player");
     if (!player) return false;
@@ -667,7 +685,7 @@
         element.textContent
       ].filter(Boolean).map((label) => String(label).replace(/\s+/g, " ").trim());
 
-      if (!labels.some((label) => AD_SKIP_LABEL_RE.test(label))) continue;
+      if (!labels.some((label) => H.isAdSkipLabel(label))) continue;
 
       // Once YouTube positively reports an ad, clicking a hidden-but-present
       // localized Skip control is safe and avoids a race with our cosmetic
@@ -682,7 +700,7 @@
     return clickFirstVisible(AD_SKIP_SELECTORS) || clickLocalizedSkipControl();
   }
 
-  function queueAdCleanup(delay = 50) {
+  function queueAdCleanup(delay = 12) {
     if (state.adCleanupTimer !== null) return;
     state.adCleanupTimer = setTimeout(() => {
       state.adCleanupTimer = null;
