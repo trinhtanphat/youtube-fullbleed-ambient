@@ -10,6 +10,19 @@ const guardSource = fs.readFileSync(path.join(root, "page-guard.js"), "utf8");
 
 function bootGuard() {
   let shield = "on";
+  let adActive = false;
+  let nativeSkipCalls = 0;
+  const listeners = new Map();
+  const player = {
+    classList: {
+      contains(name) {
+        return adActive && (name === "ad-showing" || name === "ad-interrupting");
+      }
+    },
+    skipAd() {
+      nativeSkipCalls += 1;
+    }
+  };
   const payload = JSON.stringify({
     videoDetails: { videoId: "abc123", title: "Playback" },
     streamingData: { formats: [{ itag: 18 }] },
@@ -72,11 +85,23 @@ function bootGuard() {
     Response: TestResponse,
     Headers: TestHeaders,
     XMLHttpRequest: TestXhr,
+    Event,
     document: {
       documentElement: {
         getAttribute(name) {
           return name === "data-ytfb-ad-shield" ? shield : null;
-        }
+        },
+        setAttribute() {}
+      },
+      addEventListener(type, handler) {
+        listeners.set(type, handler);
+      },
+      dispatchEvent(event) {
+        listeners.get(event.type)?.(event);
+        return true;
+      },
+      querySelector(selector) {
+        return selector === "#movie_player" ? player : null;
       }
     },
     fetch: async (input) => new TestResponse(payload, {
@@ -91,6 +116,12 @@ function bootGuard() {
     context,
     setShield(value) {
       shield = value;
+    },
+    setAdActive(value) {
+      adActive = Boolean(value);
+    },
+    getNativeSkipCalls() {
+      return nativeSkipCalls;
     }
   };
 }
@@ -142,4 +173,25 @@ test("Ad Shield off leaves fetch payload unchanged", async () => {
   const body = await response.json();
   assert.equal(Array.isArray(body.adPlacements), true);
   assert.equal(Array.isArray(body.adSlots), true);
+});
+
+
+test("MAIN-world native skip bridge calls YouTube skipAd only during a positive ad state", () => {
+  const { context, setAdActive, getNativeSkipCalls } = bootGuard();
+
+  context.document.dispatchEvent(new context.Event("ytfb-request-native-skip"));
+  assert.equal(getNativeSkipCalls(), 0);
+
+  setAdActive(true);
+  context.document.dispatchEvent(new context.Event("ytfb-request-native-skip"));
+  assert.equal(getNativeSkipCalls(), 1);
+});
+
+test("MAIN-world native skip bridge respects Ad Shield off", () => {
+  const { context, setAdActive, setShield, getNativeSkipCalls } = bootGuard();
+  setAdActive(true);
+  setShield("off");
+
+  context.document.dispatchEvent(new context.Event("ytfb-request-native-skip"));
+  assert.equal(getNativeSkipCalls(), 0);
 });
