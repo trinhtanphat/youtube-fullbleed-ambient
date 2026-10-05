@@ -674,24 +674,42 @@
     return false;
   }
 
+  function collectOpenRoots() {
+    const roots = [document];
+    const seen = new Set(roots);
+
+    for (let index = 0; index < roots.length && roots.length < 64; index += 1) {
+      const root = roots[index];
+      for (const host of root.querySelectorAll("*")) {
+        const shadow = host.shadowRoot;
+        if (!shadow || seen.has(shadow)) continue;
+        seen.add(shadow);
+        roots.push(shadow);
+        if (roots.length >= 64) break;
+      }
+    }
+
+    return roots;
+  }
+
   function clickLocalizedSkipControl() {
-    const player = document.querySelector("#movie_player");
-    if (!player) return false;
+    // This fallback is called only after playerReportsAd() returned true.
+    // Some 2026 YouTube layouts render the localized Skip control outside
+    // #movie_player or inside an open ShadowRoot, so search the composed page.
+    for (const root of collectOpenRoots()) {
+      for (const element of root.querySelectorAll("button, [role='button']")) {
+        const labels = [
+          element.getAttribute("aria-label"),
+          element.getAttribute("title"),
+          element.textContent
+        ].filter(Boolean).map((label) => String(label).replace(/\s+/g, " ").trim());
 
-    for (const element of player.querySelectorAll("button, [role='button']")) {
-      const labels = [
-        element.getAttribute("aria-label"),
-        element.getAttribute("title"),
-        element.textContent
-      ].filter(Boolean).map((label) => String(label).replace(/\s+/g, " ").trim());
+        if (!labels.some((label) => H.isAdSkipLabel(label))) continue;
 
-      if (!labels.some((label) => H.isAdSkipLabel(label))) continue;
-
-      // Once YouTube positively reports an ad, clicking a hidden-but-present
-      // localized Skip control is safe and avoids a race with our cosmetic
-      // shield. Some 2026 layouts do not keep a stable skip-button class.
-      element.click();
-      return true;
+        const clickable = element.closest?.("button, [role='button']") || element;
+        clickable.click();
+        return true;
+      }
     }
     return false;
   }
