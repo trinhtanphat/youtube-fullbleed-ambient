@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.8.3";
+  const RUNTIME_VERSION = "1.8.4";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -674,11 +674,8 @@
     return false;
   }
 
-  function clickLocalizedSkipControl() {
-    const player = document.querySelector("#movie_player");
-    if (!player) return false;
-
-    for (const element of player.querySelectorAll("button, [role='button']")) {
+  function clickLocalizedSkipInRoot(root) {
+    for (const element of root.querySelectorAll("button, [role='button']")) {
       const labels = [
         element.getAttribute("aria-label"),
         element.getAttribute("title"),
@@ -687,11 +684,41 @@
 
       if (!labels.some((label) => H.isAdSkipLabel(label))) continue;
 
-      // Once YouTube positively reports an ad, clicking a hidden-but-present
-      // localized Skip control is safe and avoids a race with our cosmetic
-      // shield. Some 2026 layouts do not keep a stable skip-button class.
-      element.click();
+      const clickable = element.closest?.("button, [role='button']") || element;
+      clickable.click();
       return true;
+    }
+    return false;
+  }
+
+  function collectOpenShadowRoots() {
+    const roots = [];
+    const queue = [document];
+    const seen = new Set(queue);
+
+    for (let index = 0; index < queue.length && roots.length < 63; index += 1) {
+      const root = queue[index];
+      for (const host of root.querySelectorAll("*")) {
+        const shadow = host.shadowRoot;
+        if (!shadow || seen.has(shadow)) continue;
+        seen.add(shadow);
+        queue.push(shadow);
+        roots.push(shadow);
+        if (roots.length >= 63) break;
+      }
+    }
+
+    return roots;
+  }
+
+  function clickLocalizedSkipControl() {
+    // Called only after playerReportsAd() returned true. Search the light DOM
+    // first because 2026 layouts can place Skip outside #movie_player.
+    if (clickLocalizedSkipInRoot(document)) return true;
+
+    // Some Web Component experiments place the control in an open ShadowRoot.
+    for (const root of collectOpenShadowRoots()) {
+      if (clickLocalizedSkipInRoot(root)) return true;
     }
     return false;
   }
