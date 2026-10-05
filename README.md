@@ -1,5 +1,11 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.7 full ad-surface masking
+
+When YouTube positively reports an in-player ad, the extension now hides the entire visible ad surface immediately, including the five-second countdown, sponsored/CTA chrome, and Skip button. A poster derived from the real video's thumbnail covers the player while the existing MAIN-world `skipAd()`, seek/16x acceleration, and terminal-ad recovery continue underneath.
+
+This removes the need to keep the Skip UI visible to the user while still preserving the underlying recovery pipeline.
+
 ## v1.8.6 terminal-ad completion recovery
 
 A live Hostinger pre-roll in Session 2 exposed a separate failure mode from the synthetic-click bug: the ad media reached its exact endpoint (`0:18 / 0:18`) while YouTube still kept `#movie_player.ad-showing` active. At that point seek/16x has nowhere left to advance.

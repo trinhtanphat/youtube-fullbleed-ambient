@@ -4,7 +4,7 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.8.6";
+  const RUNTIME_VERSION = "1.8.7";
   const MAIN_SKIP_EVENT = "ytfb-request-native-skip";
   const MAIN_FINISH_EVENT = "ytfb-request-terminal-ad-finish";
 
@@ -31,6 +31,9 @@
     videoFrameCallbackId: null,
     renderWatchdogId: null,
     adRestore: null,
+    adCover: null,
+    adCoverImage: null,
+    adCoverPlayer: null,
     adTimer: null,
     adCleanupTimer: null,
     adSkipClicks: 0,
@@ -99,6 +102,37 @@
     if (src && state.fallback.src !== src) state.fallback.src = src;
     state.root.classList.toggle("ytfb-static", state.drawFailed);
     state.root.classList.toggle("ytfb-awaiting-frame", !state.relayLive && !state.hasAmbientFrame && !state.drawFailed);
+  }
+
+  function ensureAdCover(player = document.querySelector("#movie_player")) {
+    if (!player) return null;
+
+    if (state.adCoverPlayer !== player || !state.adCover?.isConnected) {
+      state.adCover?.remove?.();
+
+      const cover = document.createElement("div");
+      cover.id = "ytfb-ad-cover";
+      cover.setAttribute("aria-hidden", "true");
+
+      const image = document.createElement("img");
+      image.className = "ytfb-ad-cover-image";
+      image.alt = "";
+      image.decoding = "async";
+
+      cover.append(image);
+      player.append(cover);
+
+      state.adCover = cover;
+      state.adCoverImage = image;
+      state.adCoverPlayer = player;
+    }
+
+    const src = H.getThumbnailUrl(location.href);
+    if (src && state.adCoverImage && state.adCoverImage.src !== src) {
+      state.adCoverImage.src = src;
+    }
+
+    return state.adCover;
   }
 
   function clearTopbarRelay() {
@@ -796,6 +830,10 @@
     const player = document.querySelector("#movie_player");
     const adActive = playerReportsAd();
     html.classList.toggle("ytfb-ad-active", adActive);
+
+    if (adActive) {
+      ensureAdCover(player);
+    }
 
     if (!adActive) {
       state.adEpisodeActive = false;

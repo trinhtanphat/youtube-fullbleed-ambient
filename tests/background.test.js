@@ -161,7 +161,7 @@ test("runtime version change refreshes stale YouTube tabs once", () => {
     { enabled: true, adBlock: true },
     [
       { id: 11, runtimeVersion: "1.6.1" },
-      { id: 12, runtimeVersion: "1.8.6" },
+      { id: 12, runtimeVersion: "1.8.7" },
       { id: 13 }
     ],
     null,
@@ -169,7 +169,7 @@ test("runtime version change refreshes stale YouTube tabs once", () => {
   );
 
   assert.deepEqual(reloads, [11, 13]);
-  assert.equal(localState.ytfbRuntimeVersionSeen, "1.8.6");
+  assert.equal(localState.ytfbRuntimeVersionSeen, "1.8.7");
 
   listeners.installed({ reason: "update" });
   listeners.startup();
@@ -180,11 +180,11 @@ test("current runtime version does not reload already-current YouTube tabs", () 
   const { reloads } = bootWorker(
     { enabled: true, adBlock: true },
     [
-      { id: 21, runtimeVersion: "1.8.6" },
-      { id: 22, runtimeVersion: "1.8.6" }
+      { id: 21, runtimeVersion: "1.8.7" },
+      { id: 22, runtimeVersion: "1.8.7" }
     ],
     null,
-    "1.8.6"
+    "1.8.7"
   );
 
   assert.deepEqual(reloads, []);
@@ -200,7 +200,7 @@ test("Ad Shield status reports dynamic rules, feedback counter, and static guard
   assert.equal(response.ruleTotal, R.AD_RULE_IDS.length);
   assert.equal(response.pageGuardStatic, true);
   assert.equal(response.counterFeedback, true);
-  assert.equal(response.version, "1.8.6");
+  assert.equal(response.version, "1.8.7");
 });
 
 test("blocked counters combine exact network matches with page and player handling", () => {
