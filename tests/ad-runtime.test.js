@@ -71,3 +71,12 @@ test("MAIN-world guard covers globals, fetch, text, json, and arrayBuffer respon
   assert.match(guard, /S\.sanitizeJsonText\(raw, responseUrl\)/);
   assert.match(guard, /S\.sanitizeArrayBuffer\(buffer, this\.url\)/);
 });
+
+
+test("localized Skip fallback searches outside the player and open shadow roots", () => {
+  assert.match(js, /clickLocalizedSkipInRoot\(document\)/);
+  assert.match(js, /function collectOpenShadowRoots/);
+  assert.match(js, /host\.shadowRoot/);
+  assert.match(js, /clickLocalizedSkipInRoot\(root\)/);
+  assert.doesNotMatch(js, /player\.querySelectorAll\("button, \[role='button'\]"\)/);
+});
