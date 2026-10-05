@@ -97,3 +97,14 @@ test("isolated content requests native skip through the MAIN-world guard", () =>
   assert.match(guard, /ad-showing/);
   assert.match(guard, /ad-interrupting/);
 });
+
+
+test("ads stuck at the finite media endpoint request a MAIN-world completion handoff", () => {
+  assert.match(js, /MAIN_FINISH_EVENT = "ytfb-request-terminal-ad-finish"/);
+  assert.match(js, /function adAtTerminalPosition/);
+  assert.match(js, /function requestTerminalAdFinish/);
+  assert.match(js, /current >= Math\.max\(0, duration - 0\.2\)/);
+  assert.match(js, /document\.dispatchEvent\(new Event\(MAIN_FINISH_EVENT\)\)/);
+  assert.match(guard, /MAIN_FINISH_EVENT = "ytfb-request-terminal-ad-finish"/);
+  assert.match(guard, /video\.dispatchEvent\(new Event\("ended"\)\)/);
+});
