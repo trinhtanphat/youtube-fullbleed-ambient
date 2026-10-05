@@ -4,7 +4,7 @@ importScripts("ad-rules.js", "block-stats.js");
 
 const R = globalThis.YTFBAdRules;
 const S = globalThis.YTFBBlockStats;
-const RUNTIME_VERSION = "1.8.4";
+const RUNTIME_VERSION = "1.8.5";
 const DEFAULT_SETTINGS = Object.freeze({ enabled: true, adBlock: true });
 const STATS_KEY = "ytfbBlockStats";
 const RUNTIME_SEEN_KEY = "ytfbRuntimeVersionSeen";
