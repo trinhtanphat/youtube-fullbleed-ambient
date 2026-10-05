@@ -1,5 +1,11 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.6 terminal-ad completion recovery
+
+A live Hostinger pre-roll in Session 2 exposed a separate failure mode from the synthetic-click bug: the ad media reached its exact endpoint (`0:18 / 0:18`) while YouTube still kept `#movie_player.ad-showing` active. At that point seek/16x has nowhere left to advance.
+
+v1.8.6 detects this terminal finite-ad state and asks the MAIN-world guard to finish the ad lifecycle. The guard retries native `skipAd()` and, only when the positively detected ad media is already at its finite endpoint, dispatches the terminal media handoff (`timeupdate` + `ended`). This path is bounded to short finite ad media and does nothing when Ad Shield is off.
+
 ## v1.8.5 MAIN-world native Skip fix
 
 A live Session 2 ad exposed a control-flow bug: once a visible Skip button existed, the isolated content script returned immediately after `element.click()`, even when YouTube ignored that synthetic click. That prevented the native player API and the seek/16x fallback from running.
