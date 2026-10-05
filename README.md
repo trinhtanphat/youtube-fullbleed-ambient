@@ -1,5 +1,11 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.5 MAIN-world native Skip fix
+
+A live Session 2 ad exposed a control-flow bug: once a visible Skip button existed, the isolated content script returned immediately after `element.click()`, even when YouTube ignored that synthetic click. That prevented the native player API and the seek/16x fallback from running.
+
+v1.8.5 removes that short circuit and adds a small MAIN-world bridge in `page-guard.js`. While YouTube positively reports `ad-showing` or `ad-interrupting`, the isolated content script dispatches an internal event and the MAIN-world guard calls YouTube's native `#movie_player.skipAd()` when available. If the ad state remains active, the bounded seek and muted 16x fallback continue instead of getting stuck retrying the DOM button.
+
 ## v1.8.4 global Skip-control hardening
 
 YouTube can render a localized Skip control outside `#movie_player` or inside an open Shadow DOM subtree. The Ad Shield fallback now searches the document first and only falls back to bounded open-shadow-root traversal after YouTube has positively reported an ad, so classless localized Skip controls can be clicked without matching ordinary navigation controls.

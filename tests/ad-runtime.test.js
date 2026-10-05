@@ -80,3 +80,20 @@ test("localized Skip fallback searches outside the player and open shadow roots"
   assert.match(js, /clickLocalizedSkipInRoot\(root\)/);
   assert.doesNotMatch(js, /player\.querySelectorAll\("button, \[role='button'\]"\)/);
 });
+
+
+test("DOM Skip attempts do not short-circuit native API and acceleration fallbacks", () => {
+  assert.match(js, /const domSkipAttempted = tryClickAdSkip\(\);/);
+  assert.match(js, /const apiSkipAttempted = trySkipPlayerApi\(player\);/);
+  assert.match(js, /video\.playbackRate = 16/);
+  assert.doesNotMatch(js, /if \(tryClickAdSkip\(\)\) \{[\s\S]*?return;/);
+});
+
+test("isolated content requests native skip through the MAIN-world guard", () => {
+  assert.match(js, /MAIN_SKIP_EVENT = "ytfb-request-native-skip"/);
+  assert.match(js, /document\.dispatchEvent\(new Event\(MAIN_SKIP_EVENT\)\)/);
+  assert.match(guard, /MAIN_SKIP_EVENT = "ytfb-request-native-skip"/);
+  assert.match(guard, /player\.skipAd\(\)/);
+  assert.match(guard, /ad-showing/);
+  assert.match(guard, /ad-interrupting/);
+});

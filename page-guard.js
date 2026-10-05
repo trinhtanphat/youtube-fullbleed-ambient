@@ -20,6 +20,24 @@
     }
   }
 
+  const MAIN_SKIP_EVENT = "ytfb-request-native-skip";
+
+  document.addEventListener(MAIN_SKIP_EVENT, () => {
+    if (!enabled()) return;
+
+    const player = document.querySelector("#movie_player");
+    const adActive = player?.classList?.contains("ad-showing") ||
+      player?.classList?.contains("ad-interrupting");
+    if (!adActive || typeof player?.skipAd !== "function") return;
+
+    try {
+      player.skipAd();
+      document.documentElement?.setAttribute("data-ytfb-main-skip", String(Date.now()));
+    } catch {
+      // YouTube experiments may expose a player without a usable skipAd method.
+    }
+  }, true);
+
   // Default-on is intentional: Ad Shield is enabled by default and this script
   // runs at document_start before the isolated content script reads settings.
   // content.js later sets data-ytfb-ad-shield="off" immediately when the user
