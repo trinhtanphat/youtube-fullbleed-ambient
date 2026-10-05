@@ -4,12 +4,14 @@ importScripts("ad-rules.js", "block-stats.js");
 
 const R = globalThis.YTFBAdRules;
 const S = globalThis.YTFBBlockStats;
-const RUNTIME_VERSION = "1.8.2";
+const RUNTIME_VERSION = "1.8.3";
 const DEFAULT_SETTINGS = Object.freeze({ enabled: true, adBlock: true });
 const STATS_KEY = "ytfbBlockStats";
+const RUNTIME_SEEN_KEY = "ytfbRuntimeVersionSeen";
 
 let statsCache = null;
 let statsSaveTimer = null;
+let runtimeRefreshStarted = false;
 
 function shieldEnabled(settings) {
   return settings?.enabled !== false && settings?.adBlock !== false;
@@ -114,13 +116,30 @@ function refreshStaleYoutubeTabs() {
   });
 }
 
+function refreshTabsForRuntimeVersionOnce() {
+  if (runtimeRefreshStarted) return;
+  runtimeRefreshStarted = true;
+
+  chrome.storage.local.get({ [RUNTIME_SEEN_KEY]: "" }, (result) => {
+    const seen = String(result?.[RUNTIME_SEEN_KEY] || "");
+    if (seen === RUNTIME_VERSION) return;
+
+    chrome.storage.local.set({ [RUNTIME_SEEN_KEY]: RUNTIME_VERSION }, () => {
+      if (chrome.runtime.lastError) return;
+      setTimeout(refreshStaleYoutubeTabs, 120);
+    });
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  syncFromStorage(() => setTimeout(refreshStaleYoutubeTabs, 120));
+  syncFromStorage();
+  refreshTabsForRuntimeVersionOnce();
   withStats(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
   syncFromStorage();
+  refreshTabsForRuntimeVersionOnce();
   withStats(() => {});
 });
 
@@ -192,4 +211,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 syncFromStorage();
+refreshTabsForRuntimeVersionOnce();
 withStats(() => {});
