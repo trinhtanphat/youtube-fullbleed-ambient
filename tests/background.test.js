@@ -7,12 +7,16 @@ const vm = require("node:vm");
 function bootWorker(
   initialSettings = { enabled: true, adBlock: true },
   youtubeTabs = [],
-  initialStats = null
+  initialStats = null,
+  initialRuntimeVersion = ""
 ) {
   const dnrCalls = [];
   const reloads = [];
   const badges = [];
-  const localState = { ytfbBlockStats: initialStats };
+  const localState = {
+    ytfbBlockStats: initialStats,
+    ytfbRuntimeVersionSeen: initialRuntimeVersion
+  };
   const listeners = {
     storageChanged: null,
     installed: null,
@@ -152,17 +156,38 @@ test("background disables all network Ad Shield rules when master toggle is off"
   assert.equal(Array.from(dnrCalls.at(-1).addRules).length, 0);
 });
 
-test("install refreshes stale YouTube tabs but leaves current v1.8.2 tabs alone", () => {
-  const { listeners, reloads } = bootWorker(
+test("runtime version change refreshes stale YouTube tabs once", () => {
+  const { listeners, reloads, localState } = bootWorker(
     { enabled: true, adBlock: true },
     [
       { id: 11, runtimeVersion: "1.6.1" },
-      { id: 12, runtimeVersion: "1.8.2" },
+      { id: 12, runtimeVersion: "1.8.3" },
       { id: 13 }
-    ]
+    ],
+    null,
+    "1.8.2"
   );
-  listeners.installed({ reason: "update" });
+
   assert.deepEqual(reloads, [11, 13]);
+  assert.equal(localState.ytfbRuntimeVersionSeen, "1.8.3");
+
+  listeners.installed({ reason: "update" });
+  listeners.startup();
+  assert.deepEqual(reloads, [11, 13]);
+});
+
+test("current runtime version does not reload already-current YouTube tabs", () => {
+  const { reloads } = bootWorker(
+    { enabled: true, adBlock: true },
+    [
+      { id: 21, runtimeVersion: "1.8.3" },
+      { id: 22, runtimeVersion: "1.8.3" }
+    ],
+    null,
+    "1.8.3"
+  );
+
+  assert.deepEqual(reloads, []);
 });
 
 test("Ad Shield status reports dynamic rules, feedback counter, and static guard", () => {
@@ -175,7 +200,7 @@ test("Ad Shield status reports dynamic rules, feedback counter, and static guard
   assert.equal(response.ruleTotal, R.AD_RULE_IDS.length);
   assert.equal(response.pageGuardStatic, true);
   assert.equal(response.counterFeedback, true);
-  assert.equal(response.version, "1.8.2");
+  assert.equal(response.version, "1.8.3");
 });
 
 test("blocked counters combine exact network matches with page and player handling", () => {
