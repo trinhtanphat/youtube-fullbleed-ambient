@@ -12,6 +12,8 @@ function bootGuard() {
   let shield = "on";
   let adActive = false;
   let nativeSkipCalls = 0;
+  let terminalAd = false;
+  let mediaEndedEvents = 0;
   const listeners = new Map();
   const player = {
     classList: {
@@ -23,6 +25,15 @@ function bootGuard() {
       nativeSkipCalls += 1;
     }
   };
+  const video = {
+    duration: 18,
+    currentTime: 4,
+    dispatchEvent(event) {
+      if (event.type === "ended") mediaEndedEvents += 1;
+      return true;
+    }
+  };
+
   const payload = JSON.stringify({
     videoDetails: { videoId: "abc123", title: "Playback" },
     streamingData: { formats: [{ itag: 18 }] },
@@ -101,7 +112,9 @@ function bootGuard() {
         return true;
       },
       querySelector(selector) {
-        return selector === "#movie_player" ? player : null;
+        if (selector === "#movie_player") return player;
+        if (selector === "video.html5-main-video" || selector === "video") return video;
+        return null;
       }
     },
     fetch: async (input) => new TestResponse(payload, {
@@ -120,8 +133,15 @@ function bootGuard() {
     setAdActive(value) {
       adActive = Boolean(value);
     },
+    setTerminalAd(value) {
+      terminalAd = Boolean(value);
+      video.currentTime = terminalAd ? video.duration : 4;
+    },
     getNativeSkipCalls() {
       return nativeSkipCalls;
+    },
+    getMediaEndedEvents() {
+      return mediaEndedEvents;
     }
   };
 }
@@ -194,4 +214,44 @@ test("MAIN-world native skip bridge respects Ad Shield off", () => {
 
   context.document.dispatchEvent(new context.Event("ytfb-request-native-skip"));
   assert.equal(getNativeSkipCalls(), 0);
+});
+
+
+test("terminal ad finish bridge emits media completion only at a finite ad endpoint", () => {
+  const {
+    context,
+    setAdActive,
+    setTerminalAd,
+    getNativeSkipCalls,
+    getMediaEndedEvents
+  } = bootGuard();
+
+  setAdActive(true);
+  context.document.dispatchEvent(new context.Event("ytfb-request-terminal-ad-finish"));
+  assert.equal(getNativeSkipCalls(), 1);
+  assert.equal(getMediaEndedEvents(), 0);
+
+  setTerminalAd(true);
+  context.document.dispatchEvent(new context.Event("ytfb-request-terminal-ad-finish"));
+  assert.equal(getNativeSkipCalls(), 2);
+  assert.equal(getMediaEndedEvents(), 1);
+});
+
+test("terminal ad finish bridge does nothing when Ad Shield is off", () => {
+  const {
+    context,
+    setAdActive,
+    setTerminalAd,
+    setShield,
+    getNativeSkipCalls,
+    getMediaEndedEvents
+  } = bootGuard();
+
+  setAdActive(true);
+  setTerminalAd(true);
+  setShield("off");
+  context.document.dispatchEvent(new context.Event("ytfb-request-terminal-ad-finish"));
+
+  assert.equal(getNativeSkipCalls(), 0);
+  assert.equal(getMediaEndedEvents(), 0);
 });
