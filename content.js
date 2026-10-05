@@ -674,18 +674,37 @@
     return false;
   }
 
-  function collectOpenRoots() {
-    const roots = [document];
-    const seen = new Set(roots);
+  function clickLocalizedSkipInRoot(root) {
+    for (const element of root.querySelectorAll("button, [role='button']")) {
+      const labels = [
+        element.getAttribute("aria-label"),
+        element.getAttribute("title"),
+        element.textContent
+      ].filter(Boolean).map((label) => String(label).replace(/\s+/g, " ").trim());
 
-    for (let index = 0; index < roots.length && roots.length < 64; index += 1) {
-      const root = roots[index];
+      if (!labels.some((label) => H.isAdSkipLabel(label))) continue;
+
+      const clickable = element.closest?.("button, [role='button']") || element;
+      clickable.click();
+      return true;
+    }
+    return false;
+  }
+
+  function collectOpenShadowRoots() {
+    const roots = [];
+    const queue = [document];
+    const seen = new Set(queue);
+
+    for (let index = 0; index < queue.length && roots.length < 63; index += 1) {
+      const root = queue[index];
       for (const host of root.querySelectorAll("*")) {
         const shadow = host.shadowRoot;
         if (!shadow || seen.has(shadow)) continue;
         seen.add(shadow);
+        queue.push(shadow);
         roots.push(shadow);
-        if (roots.length >= 64) break;
+        if (roots.length >= 63) break;
       }
     }
 
@@ -693,23 +712,13 @@
   }
 
   function clickLocalizedSkipControl() {
-    // This fallback is called only after playerReportsAd() returned true.
-    // Some 2026 YouTube layouts render the localized Skip control outside
-    // #movie_player or inside an open ShadowRoot, so search the composed page.
-    for (const root of collectOpenRoots()) {
-      for (const element of root.querySelectorAll("button, [role='button']")) {
-        const labels = [
-          element.getAttribute("aria-label"),
-          element.getAttribute("title"),
-          element.textContent
-        ].filter(Boolean).map((label) => String(label).replace(/\s+/g, " ").trim());
+    // Called only after playerReportsAd() returned true. Search the light DOM
+    // first because 2026 layouts can place Skip outside #movie_player.
+    if (clickLocalizedSkipInRoot(document)) return true;
 
-        if (!labels.some((label) => H.isAdSkipLabel(label))) continue;
-
-        const clickable = element.closest?.("button, [role='button']") || element;
-        clickable.click();
-        return true;
-      }
+    // Some Web Component experiments place the control in an open ShadowRoot.
+    for (const root of collectOpenShadowRoots()) {
+      if (clickLocalizedSkipInRoot(root)) return true;
     }
     return false;
   }
