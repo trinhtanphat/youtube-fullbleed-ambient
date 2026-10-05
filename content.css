@@ -274,8 +274,9 @@ html.ytfb-active ytd-watch-flexy ytd-watch-metadata {
 /*
  * Ad Shield cosmetic layer. Network blocking is handled by the MV3 service
  * worker; these selectors remove first-party ad containers YouTube renders.
- * In-player ads are skipped/accelerated in content.js so skip controls remain
- * available to the runtime instead of being hidden by CSS.
+ * In-player ads are skipped/accelerated through the MAIN-world player API and
+ * bounded media fallbacks. Their visual chrome no longer needs to remain
+ * visible, so the hard shield can hide the whole ad surface immediately.
  */
 html.ytfb-ad-shield #player-ads,
 html.ytfb-ad-shield .ytp-ad-text-overlay,
@@ -303,11 +304,66 @@ html.ytfb-ad-shield ytd-engagement-panel-section-list-renderer[target-id*="ads"]
   display: none !important;
 }
 
+#ytfb-ad-cover {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2147483646 !important;
+  display: block !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  background: #000 !important;
+}
+
+#ytfb-ad-cover .ytfb-ad-cover-image {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  background: #000 !important;
+}
+
+html.ytfb-ad-active #movie_player #ytfb-ad-cover,
+html.ytfb-ad-shield:has(#movie_player.ad-showing) #movie_player #ytfb-ad-cover,
+html.ytfb-ad-shield:has(#movie_player.ad-interrupting) #movie_player #ytfb-ad-cover {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Hide all in-player ad chrome, including the five-second countdown, CTA and
+ * Skip button. The native MAIN-world skip/seek/terminal pipeline runs behind
+ * this cover, so no ad control needs to remain visible to the user. */
+html.ytfb-ad-active #movie_player .video-ads.ytp-ad-module,
+html.ytfb-ad-active #movie_player .ytp-ad-module,
+html.ytfb-ad-active #movie_player .ytp-ad-text,
+html.ytfb-ad-active #movie_player .ytp-ad-simple-ad-badge,
+html.ytfb-ad-active #movie_player .ytp-ad-duration-remaining,
+html.ytfb-ad-active #movie_player .ytp-ad-preview-container,
+html.ytfb-ad-active #movie_player .ytp-ad-player-overlay,
+html.ytfb-ad-active #movie_player .ytp-ad-action-interstitial,
+html.ytfb-ad-active #movie_player .ytp-ad-message-container,
+html.ytfb-ad-active #movie_player .ytp-ad-persistent-progress-bar-container,
+html.ytfb-ad-active #movie_player .ytp-ad-overlay-container,
+html.ytfb-ad-active #movie_player .ytp-ad-skip-ad-slot,
+html.ytfb-ad-active #movie_player .ytp-ad-player-overlay-skip-or-preview,
+html.ytfb-ad-active #movie_player .ytp-skip-ad-button,
+html.ytfb-ad-active #movie_player .ytp-ad-skip-button,
+html.ytfb-ad-active #movie_player .ytp-ad-skip-button-modern,
+html.ytfb-ad-active #movie_player [class*="ad-skip"],
+html.ytfb-ad-active #movie_player [class*="ytp-ad-"] {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /*
  * While YouTube positively reports an in-player ad, never show the ad media.
  * Freeze the ambient page on the content thumbnail while skip/seek/16x logic
- * clears the segment. Skip controls stay in the DOM so cleanupAds can click
- * them immediately.
+ * clears the segment. The player itself is covered by #ytfb-ad-cover, so even
+ * an unskippable five-second window never becomes visible.
  */
 html.ytfb-ad-shield:has(#movie_player.ad-showing) #ytfb-root .ytfb-relay,
 html.ytfb-ad-shield:has(#movie_player.ad-showing) #ytfb-root canvas,
