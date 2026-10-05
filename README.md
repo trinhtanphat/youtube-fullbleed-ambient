@@ -1,5 +1,9 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.3 stale-tab refresh fix
+
+Reloading or updating an unpacked extension can leave already-open YouTube tabs running an invalidated or older content-script context even though the service worker has the new version. The background worker now records the last runtime version it refreshed and, once per new extension version, probes open YouTube tabs and reloads only those that are missing the current content script or report an older runtime. This prevents the "extension updated but ads still show until I refresh YouTube" state without repeatedly reloading tabs whenever the service worker wakes.
+
 ## v1.8.2 Unicode ad-label hardening
 
 Localized Skip/Ad fallback matching now preserves Unicode letters instead of discarding non-Latin scripts. This restores Japanese matching lost during the v1.7.1 accent-fold rewrite and adds tested fallback labels for Korean, Russian, Simplified/Traditional Chinese, and Portuguese while preserving Vietnamese accent folding.
