@@ -21,20 +21,61 @@
   }
 
   const MAIN_SKIP_EVENT = "ytfb-request-native-skip";
+  const MAIN_FINISH_EVENT = "ytfb-request-terminal-ad-finish";
+
+  function mainPlayer() {
+    return document.querySelector("#movie_player");
+  }
+
+  function mainPlayerReportsAd(player = mainPlayer()) {
+    return player?.classList?.contains("ad-showing") ||
+      player?.classList?.contains("ad-interrupting");
+  }
 
   document.addEventListener(MAIN_SKIP_EVENT, () => {
     if (!enabled()) return;
 
-    const player = document.querySelector("#movie_player");
-    const adActive = player?.classList?.contains("ad-showing") ||
-      player?.classList?.contains("ad-interrupting");
-    if (!adActive || typeof player?.skipAd !== "function") return;
+    const player = mainPlayer();
+    if (!mainPlayerReportsAd(player) || typeof player?.skipAd !== "function") return;
 
     try {
       player.skipAd();
       document.documentElement?.setAttribute("data-ytfb-main-skip", String(Date.now()));
     } catch {
       // YouTube experiments may expose a player without a usable skipAd method.
+    }
+  }, true);
+
+  document.addEventListener(MAIN_FINISH_EVENT, () => {
+    if (!enabled()) return;
+
+    const player = mainPlayer();
+    if (!mainPlayerReportsAd(player)) return;
+
+    try {
+      if (typeof player?.skipAd === "function") player.skipAd();
+    } catch {}
+
+    const video = document.querySelector("video.html5-main-video") || document.querySelector("video");
+    const duration = Number(video?.duration);
+    const current = Number(video?.currentTime);
+    const terminal = video &&
+      Number.isFinite(duration) &&
+      duration > 0 &&
+      duration <= 120 &&
+      Number.isFinite(current) &&
+      current >= Math.max(0, duration - 0.25);
+
+    if (!terminal || !mainPlayerReportsAd(player)) return;
+
+    try {
+      video.currentTime = duration;
+      video.dispatchEvent(new Event("timeupdate"));
+      video.dispatchEvent(new Event("ended"));
+      document.documentElement?.setAttribute("data-ytfb-main-finish", String(Date.now()));
+    } catch {
+      // A synthetic media terminal event is a last-resort handoff only for a
+      // positively detected ad that is already at its finite media endpoint.
     }
   }, true);
 
