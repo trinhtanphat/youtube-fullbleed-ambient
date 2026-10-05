@@ -165,7 +165,7 @@ test("runtime version change refreshes stale YouTube tabs once", () => {
       { id: 13 }
     ],
     null,
-    "1.8.3"
+    "1.8.2"
   );
 
   assert.deepEqual(reloads, [11, 13]);
