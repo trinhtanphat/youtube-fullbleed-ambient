@@ -1,5 +1,9 @@
 # YouTube Fullbleed Ambient
 
+## v1.8.4 global Skip-control hardening
+
+YouTube can render a localized Skip control outside `#movie_player` or inside an open Shadow DOM subtree. The Ad Shield fallback now searches the document first and only falls back to bounded open-shadow-root traversal after YouTube has positively reported an ad, so classless localized Skip controls can be clicked without matching ordinary navigation controls.
+
 ## v1.8.3 stale-tab refresh fix
 
 Reloading or updating an unpacked extension can leave already-open YouTube tabs running an invalidated or older content-script context even though the service worker has the new version. The background worker now records the last runtime version it refreshed and, once per new extension version, probes open YouTube tabs and reloads only those that are missing the current content script or report an older runtime. This prevents the "extension updated but ads still show until I refresh YouTube" state without repeatedly reloading tabs whenever the service worker wakes.
