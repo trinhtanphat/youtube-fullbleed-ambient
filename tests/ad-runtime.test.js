@@ -36,10 +36,15 @@ test("sanitizer recognizes modern player ad payload keys", () => {
   }
 });
 
-test("2026 interactive player overlay is hidden without hiding the whole ad module", () => {
-  assert.match(css, /html\.ytfb-ad-shield \.ytp-ad-player-overlay,/);
-  assert.match(css, /ytp-ad-player-overlay-layout__ad-info-container/);
-  assert.doesNotMatch(css, /html\.ytfb-ad-shield \.video-ads\.ytp-ad-module\s*\{/);
+test("hard shield hides the entire in-player ad surface including Skip controls", () => {
+  assert.match(js, /function ensureAdCover/);
+  assert.match(js, /cover\.id = "ytfb-ad-cover"/);
+  assert.match(js, /H\.getThumbnailUrl\(location\.href\)/);
+  assert.match(css, /#ytfb-ad-cover/);
+  assert.match(css, /html\.ytfb-ad-active #movie_player \.video-ads\.ytp-ad-module/);
+  assert.match(css, /html\.ytfb-ad-active #movie_player \.ytp-skip-ad-button/);
+  assert.match(css, /html\.ytfb-ad-active #movie_player \[class\*="ad-skip"\]/);
+  assert.match(css, /pointer-events: auto !important/);
 });
 
 test("localized skip controls use the tested accent-folding helper", () => {
@@ -107,4 +112,14 @@ test("ads stuck at the finite media endpoint request a MAIN-world completion han
   assert.match(js, /document\.dispatchEvent\(new Event\(MAIN_FINISH_EVENT\)\)/);
   assert.match(guard, /MAIN_FINISH_EVENT = "ytfb-request-terminal-ad-finish"/);
   assert.match(guard, /video\.dispatchEvent\(new Event\("ended"\)\)/);
+});
+
+
+test("five-second ad UI remains visually hidden while runtime fallbacks continue", () => {
+  assert.match(css, /html\.ytfb-ad-active #movie_player #ytfb-ad-cover/);
+  assert.match(css, /visibility: visible !important/);
+  assert.match(css, /html\.ytfb-ad-active #movie_player video\.html5-main-video[\s\S]*opacity: 0 !important/);
+  assert.match(js, /const apiSkipAttempted = trySkipPlayerApi\(player\);/);
+  assert.match(js, /video\.playbackRate = 16/);
+  assert.match(js, /requestTerminalAdFinish\(video\)/);
 });
