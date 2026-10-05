@@ -4,8 +4,9 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.8.5";
+  const RUNTIME_VERSION = "1.8.6";
   const MAIN_SKIP_EVENT = "ytfb-request-native-skip";
+  const MAIN_FINISH_EVENT = "ytfb-request-terminal-ad-finish";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -35,6 +36,7 @@
     adSkipClicks: 0,
     adAccelerations: 0,
     adSeeks: 0,
+    lastAdFinishRequestAt: 0,
     adEpisodeActive: false,
     adObserver: null,
     adObservedPlayer: null,
@@ -628,6 +630,33 @@
         // YouTube may replace the media element between the ad and content.
       }
     }
+    state.lastAdFinishRequestAt = 0;
+  }
+
+  function adAtTerminalPosition(video) {
+    if (!video?.isConnected) return false;
+    const duration = Number(video.duration);
+    const current = Number(video.currentTime);
+    return Number.isFinite(duration) &&
+      duration > 0 &&
+      duration <= 120 &&
+      Number.isFinite(current) &&
+      current >= Math.max(0, duration - 0.2);
+  }
+
+  function requestTerminalAdFinish(video) {
+    if (!adAtTerminalPosition(video)) return false;
+
+    const now = performance.now();
+    if (now - state.lastAdFinishRequestAt < 240) return true;
+    state.lastAdFinishRequestAt = now;
+
+    try {
+      document.dispatchEvent(new Event(MAIN_FINISH_EVENT));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function keepAdAccelerated() {
@@ -662,6 +691,8 @@
       state.adTimer = setTimeout(keepAdAccelerated, 60);
       return;
     }
+
+    requestTerminalAdFinish(video);
 
     try {
       video.muted = true;
@@ -795,8 +826,10 @@
     }
 
     // A positive YouTube ad state plus a short finite media duration is a safe
-    // signal to jump to the segment tail. This prevents the ad from remaining
-    // visible while the 16x fallback is working.
+    // signal to jump to the segment tail. If the media is already at the tail
+    // but YouTube still reports ad-showing, ask the MAIN-world guard to finish
+    // the ad lifecycle instead of spinning forever on the last frame.
+    requestTerminalAdFinish(video);
     seekAdTail(video);
 
     if (state.adRestore) {
