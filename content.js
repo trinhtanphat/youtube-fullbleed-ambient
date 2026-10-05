@@ -4,7 +4,8 @@
   const H = globalThis.YTFBHelpers;
   if (!H) return;
 
-  const RUNTIME_VERSION = "1.8.4";
+  const RUNTIME_VERSION = "1.8.5";
+  const MAIN_SKIP_EVENT = "ytfb-request-native-skip";
 
   const state = {
     settings: H.normalizeSettings(),
@@ -523,13 +524,24 @@
   }
 
   function trySkipPlayerApi(player) {
-    if (!player || typeof player.skipAd !== "function") return false;
-    try {
-      player.skipAd();
-      return true;
-    } catch {
-      return false;
+    let attempted = false;
+
+    if (player && typeof player.skipAd === "function") {
+      try {
+        player.skipAd();
+        attempted = true;
+      } catch {}
     }
+
+    // content.js runs in Chromium's isolated world, where YouTube's page-world
+    // player methods may not be visible. page-guard.js listens for this event
+    // in MAIN world and calls the native player.skipAd() there.
+    try {
+      document.dispatchEvent(new Event(MAIN_SKIP_EVENT));
+      attempted = true;
+    } catch {}
+
+    return attempted;
   }
 
   function seekAdTail(video) {
@@ -637,17 +649,18 @@
     }
 
     clickFirstVisible(AD_CLOSE_SELECTORS);
-    if (tryClickAdSkip()) {
-      state.adSkipClicks += 1;
+
+    // Do not stop the fallback pipeline merely because a DOM Skip button was
+    // found. YouTube can ignore synthetic element.click() calls on a visible
+    // Skip control. Always attempt the MAIN-world player API too, then keep the
+    // bounded seek/16x fallback alive until the ad state actually clears.
+    const domSkipAttempted = tryClickAdSkip();
+    const apiSkipAttempted = trySkipPlayerApi(player);
+    if (domSkipAttempted || apiSkipAttempted) state.adSkipClicks += 1;
+
+    if (!playerReportsAd()) {
       state.adTimer = setTimeout(keepAdAccelerated, 60);
       return;
-    }
-    if (trySkipPlayerApi(player)) {
-      state.adSkipClicks += 1;
-      if (!playerReportsAd()) {
-        state.adTimer = setTimeout(keepAdAccelerated, 60);
-        return;
-      }
     }
 
     try {
@@ -766,17 +779,13 @@
 
     clickFirstVisible(AD_CLOSE_SELECTORS);
 
-    if (tryClickAdSkip()) {
-      state.adSkipClicks += 1;
+    const domSkipAttempted = tryClickAdSkip();
+    const apiSkipAttempted = trySkipPlayerApi(player);
+    if (domSkipAttempted || apiSkipAttempted) state.adSkipClicks += 1;
+
+    if (!playerReportsAd()) {
       queueAdCleanup(40);
       return;
-    }
-    if (trySkipPlayerApi(player)) {
-      state.adSkipClicks += 1;
-      if (!playerReportsAd()) {
-        queueAdCleanup(40);
-        return;
-      }
     }
 
     const video = state.video || document.querySelector("video.html5-main-video") || document.querySelector("video");
